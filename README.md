@@ -1,32 +1,39 @@
-# React + TypeScript + Vite
+# Shift Tracker
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A personal web app for tracking work shifts across multiple jobs and calculating earnings — built for South Australia (Australia/Adelaide timezone), fully local, no backend, no login.
 
-Currently, two official plugins are available:
+Live: https://shift-tracker-nu.vercel.app
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Features
 
-## React Compiler
+- **Multi-job pay rules**: separate morning/night rates, configurable weekend and public holiday loadings, casual loading, tiered overtime (daily and weekly thresholds), and superannuation.
+- **Cash-in-hand income**: mark a job as non-taxable — it's tracked and shown separately from taxable income and never included in the tax estimate.
+- **AU tax estimate**: fortnightly/weekly take-home pay estimate using resident tax brackets, the Low Income Tax Offset, and the Medicare levy.
+- **Calendar and list views** for logging and reviewing shifts, with a full worked-calculation breakdown per shift.
+- **Reports**: weekly/fortnightly earnings by job, an earnings-over-time chart, and CSV export.
+- **Dark mode** (light/dark/system) and an installable PWA for iPhone/Android home screens.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Data & privacy
 
-## Expanding the Oxlint configuration
+All data is stored locally in the browser via IndexedDB (Dexie.js). Nothing is sent to a server — there's no account, no login, and no backend.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Tech stack
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+React + TypeScript + Vite, Tailwind CSS, Dexie.js, date-fns, Recharts.
+
+## Development
+
+```bash
+npm install
+npm run dev      # start the dev server
+npm test         # run the pay calculation engine's unit tests
+npm run build    # production build
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Deployment
+
+Deployed on Vercel. To redeploy after changes:
+
+```bash
+npx vercel --prod
+```
