@@ -213,6 +213,19 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
           one is used if a public holiday falls on a weekend.
         </p>
 
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <Checkbox
+            label="No night loading on weekends or public holidays"
+            checked={form.ignoreNightRateOnWeekendsAndHolidays}
+            onChange={(e) => update('ignoreNightRateOnWeekendsAndHolidays', e.target.checked)}
+          />
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            On Saturday, Sunday, and public holidays, always use the day rate as the base — the night-rate window is
+            ignored, so only the weekend/PH loading applies, not night + weekend stacked together. Weekday shifts are
+            unaffected.
+          </p>
+        </div>
+
         <Field label="Casual loading (%)">
           <Input
             type="number"

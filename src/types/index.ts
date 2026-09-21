@@ -34,6 +34,12 @@ export interface Job {
    * time and applies to the whole shift, as before.
    */
   nightRateEndsAt: string | null;
+  /**
+   * When true, Saturday/Sunday/public holiday shifts always use morningRate as their base —
+   * the night-rate window is ignored entirely on those days, so only the weekend/PH
+   * multiplier applies, never a separate night dollar amount. Weekday shifts are unaffected.
+   */
+  ignoreNightRateOnWeekendsAndHolidays: boolean;
 
   saturdayMultiplier: number;
   sundayMultiplier: number;
@@ -99,6 +105,7 @@ export function normalizeJob(job: Job): Job {
     nightLoadingPercent: job.nightLoadingPercent ?? 21,
     taxable: job.taxable ?? true,
     nightRateEndsAt: job.nightRateEndsAt ?? null,
+    ignoreNightRateOnWeekendsAndHolidays: job.ignoreNightRateOnWeekendsAndHolidays ?? false,
   };
 }
 
@@ -115,6 +122,7 @@ export function createDefaultJob(overrides: Partial<Job> = {}): Job {
     nightLoadingPercent: 21,
     nightRateStartsAt: '14:00',
     nightRateEndsAt: null,
+    ignoreNightRateOnWeekendsAndHolidays: false,
     saturdayMultiplier: 1.5,
     sundayMultiplier: 2,
     publicHolidayMultiplier: 1,

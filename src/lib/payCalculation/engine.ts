@@ -54,10 +54,16 @@ interface RawTimeSegment {
  * nightRateEndsAt, the whole shift is one segment decided by start time alone (legacy
  * behavior). When it does, night rate is a recurring daily window [nightRateStartsAt,
  * nightRateEndsAt) that wraps past midnight — a shift running past the window's end reverts
- * to morningRate for the remainder, even mid-shift.
+ * to morningRate for the remainder, even mid-shift. On a Saturday/Sunday/public holiday, a job
+ * with ignoreNightRateOnWeekendsAndHolidays set skips the window entirely: the whole shift is
+ * morningRate, and only the weekend/PH multiplier applies.
  */
-function computeRawTimeSegments(shift: Shift, job: Job): RawTimeSegment[] {
+function computeRawTimeSegments(shift: Shift, job: Job, dayType: DayType): RawTimeSegment[] {
   const { start, end } = resolveShiftTimes(shift.date, shift.startTime, shift.endTime);
+
+  if (job.ignoreNightRateOnWeekendsAndHolidays && dayType !== 'weekday') {
+    return [{ start, end, rateLabel: 'morning' }];
+  }
 
   if (job.nightRateEndsAt == null) {
     const rateLabel: RateLabel = shift.startTime >= job.nightRateStartsAt ? 'night' : 'morning';
@@ -220,7 +226,7 @@ export function computeShiftDaily(
     return base * (1 + job.casualLoadingPercent / 100) * dayMultiplier;
   };
 
-  const rawSegments = computeRawTimeSegments(shift, job);
+  const rawSegments = computeRawTimeSegments(shift, job, dayType);
   const hourSegments = toHourSegments(rawSegments, shift.unpaidBreakMinutes, rateFor);
   const workedHours = hourSegments.reduce((sum, s) => sum + s.hours, 0);
 
@@ -243,7 +249,12 @@ export function computeShiftDaily(
 
   // Legacy singular fields describe the rate at the shift's start — a display fallback for
   // when the shift isn't split; see regularSegments/overtimeSegments for the accurate totals.
-  const rateLabel: RateLabel = shift.startTime >= job.nightRateStartsAt ? 'night' : 'morning';
+  const rateLabel: RateLabel =
+    job.ignoreNightRateOnWeekendsAndHolidays && dayType !== 'weekday'
+      ? 'morning'
+      : shift.startTime >= job.nightRateStartsAt
+        ? 'night'
+        : 'morning';
   const baseRate = rateLabel === 'night' ? job.nightRate : job.morningRate;
   const casualLoadedRate = baseRate * (1 + job.casualLoadingPercent / 100);
   const loadedHourlyRate = casualLoadedRate * dayMultiplier;

@@ -199,6 +199,64 @@ describe('computeShiftDaily — night-rate window (nightRateEndsAt)', () => {
   });
 });
 
+describe('computeShiftDaily — ignoreNightRateOnWeekendsAndHolidays', () => {
+  it('by default (flag off), night rate and weekend multiplier stack on a Saturday night shift', () => {
+    const job = createDefaultJob({ morningRate: 20, nightRate: 30, nightRateStartsAt: '18:00', nightRateEndsAt: '06:00', saturdayMultiplier: 1.5 });
+    const shift = makeShift({ date: '2026-09-19', startTime: '22:00', endTime: '06:00' }); // Saturday, 8h
+    const result = computeShiftDaily(shift, job, []);
+    expect(result.regularSegments).toHaveLength(1);
+    expect(result.regularSegments[0]).toMatchObject({ rateLabel: 'night', hours: 8, rate: 45 }); // 30 * 1.5
+    expect(result.regularPay).toBeCloseTo(360);
+  });
+
+  it('with the flag on, a Saturday night shift uses the day rate instead, only the weekend multiplier applies', () => {
+    const job = createDefaultJob({
+      morningRate: 20,
+      nightRate: 30,
+      nightRateStartsAt: '18:00',
+      nightRateEndsAt: '06:00',
+      saturdayMultiplier: 1.5,
+      ignoreNightRateOnWeekendsAndHolidays: true,
+    });
+    const shift = makeShift({ date: '2026-09-19', startTime: '22:00', endTime: '06:00' }); // Saturday, 8h
+    const result = computeShiftDaily(shift, job, []);
+    expect(result.regularSegments).toHaveLength(1);
+    expect(result.regularSegments[0]).toMatchObject({ rateLabel: 'morning', hours: 8, rate: 30 }); // 20 * 1.5
+    expect(result.regularPay).toBeCloseTo(240);
+    expect(result.rateLabel).toBe('morning');
+    expect(result.baseRate).toBe(20);
+  });
+
+  it('with the flag on, a weekday night shift is unaffected — still uses the night rate', () => {
+    const job = createDefaultJob({
+      morningRate: 20,
+      nightRate: 30,
+      nightRateStartsAt: '18:00',
+      nightRateEndsAt: '06:00',
+      ignoreNightRateOnWeekendsAndHolidays: true,
+    });
+    const shift = makeShift({ date: '2026-09-14', startTime: '22:00', endTime: '06:00' }); // Monday, 8h
+    const result = computeShiftDaily(shift, job, []);
+    expect(result.regularSegments).toHaveLength(1);
+    expect(result.regularSegments[0]).toMatchObject({ rateLabel: 'night', hours: 8, rate: 30 });
+  });
+
+  it('with the flag on, a public holiday night shift also uses the day rate', () => {
+    const job = createDefaultJob({
+      morningRate: 20,
+      nightRate: 30,
+      nightRateStartsAt: '18:00',
+      nightRateEndsAt: '06:00',
+      publicHolidayMultiplier: 2.5,
+      ignoreNightRateOnWeekendsAndHolidays: true,
+    });
+    const shift = makeShift({ date: '2026-09-14', startTime: '22:00', endTime: '06:00', isPublicHolidayOverride: true });
+    const result = computeShiftDaily(shift, job, []);
+    expect(result.regularSegments).toHaveLength(1);
+    expect(result.regularSegments[0]).toMatchObject({ rateLabel: 'morning', hours: 8, rate: 50 }); // 20 * 2.5
+  });
+});
+
 describe('computeWeekPay — weekly overtime reconciliation', () => {
   it('leaves shifts alone when weekly threshold is not configured', () => {
     const job = createDefaultJob({ morningRate: 20 });
