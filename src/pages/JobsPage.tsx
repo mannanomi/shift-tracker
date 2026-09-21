@@ -55,7 +55,8 @@ export function JobsPage() {
                   {job.archived && <span className="text-xs text-slate-400 dark:text-slate-500">(archived)</span>}
                 </div>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  ${job.morningRate.toFixed(2)}/hr day · ${job.nightRate.toFixed(2)}/hr night (from {job.nightRateStartsAt})
+                  ${job.morningRate.toFixed(2)}/hr day · ${job.nightRate.toFixed(2)}/hr night ({job.nightRateStartsAt}
+                  {job.nightRateEndsAt ? `–${job.nightRateEndsAt}` : ' onward'})
                 </p>
                 <p className="text-xs text-slate-400 dark:text-slate-500">
                   Sat +{Math.round((job.saturdayMultiplier - 1) * 100)}% · Sun +{Math.round((job.sundayMultiplier - 1) * 100)}% · PH +

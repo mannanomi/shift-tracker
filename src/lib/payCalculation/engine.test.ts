@@ -131,6 +131,74 @@ describe('computeShiftDaily', () => {
   });
 });
 
+describe('computeShiftDaily — night-rate window (nightRateEndsAt)', () => {
+  it('leaves a shift entirely inside the window as a single night segment, even at the exact boundary', () => {
+    const job = createDefaultJob({ morningRate: 20, nightRate: 30, nightRateStartsAt: '18:00', nightRateEndsAt: '06:00' });
+    // 22:00 -> 06:00 next day: ends exactly when the window closes, so it should NOT split.
+    const shift = makeShift({ startTime: '22:00', endTime: '06:00' });
+    const result = computeShiftDaily(shift, job, []);
+    expect(result.regularSegments).toHaveLength(1);
+    expect(result.regularSegments[0]).toMatchObject({ rateLabel: 'night', hours: 8 });
+  });
+
+  it('leaves a shift entirely outside the window as a single day segment', () => {
+    const job = createDefaultJob({ morningRate: 20, nightRate: 30, nightRateStartsAt: '18:00', nightRateEndsAt: '06:00' });
+    const shift = makeShift({ startTime: '09:00', endTime: '17:00' });
+    const result = computeShiftDaily(shift, job, []);
+    expect(result.regularSegments).toHaveLength(1);
+    expect(result.regularSegments[0]).toMatchObject({ rateLabel: 'morning', hours: 8 });
+  });
+
+  it('splits a shift that runs past nightRateEndsAt into night + day portions', () => {
+    // The exact scenario requested: night rate 6pm-6am, day rate resumes from 6am.
+    const job = createDefaultJob({ morningRate: 20, nightRate: 30, nightRateStartsAt: '18:00', nightRateEndsAt: '06:00' });
+    const shift = makeShift({ startTime: '22:00', endTime: '08:00' }); // 10h: 8h night + 2h day
+    const result = computeShiftDaily(shift, job, []);
+    expect(result.workedHours).toBeCloseTo(10);
+    expect(result.regularSegments).toHaveLength(2);
+    expect(result.regularSegments[0]).toMatchObject({ rateLabel: 'night', hours: 8, rate: 30 });
+    expect(result.regularSegments[1].rateLabel).toBe('morning');
+    expect(result.regularSegments[1].hours).toBeCloseTo(2);
+    expect(result.regularSegments[1].rate).toBeCloseTo(20);
+    expect(result.regularPay).toBeCloseTo(8 * 30 + 2 * 20);
+    expect(result.grossPay).toBeCloseTo(280);
+  });
+
+  it('takes daily OT from the end of the shift, correctly split across the night/day boundary', () => {
+    const job = createDefaultJob({
+      morningRate: 20,
+      nightRate: 30,
+      nightRateStartsAt: '18:00',
+      nightRateEndsAt: '06:00',
+      overtimeThresholdHoursPerDay: 8,
+      overtimeTiers: [{ hoursInTier: Infinity, multiplier: 1.5 }],
+    });
+    // 20:00 -> 08:00 = 12h: raw split is 10h night (20:00-06:00) + 2h day (06:00-08:00).
+    // 8h threshold -> 4h OT taken from the end -> last 2h night (04:00-06:00) + 2h day (06:00-08:00).
+    const shift = makeShift({ startTime: '20:00', endTime: '08:00' });
+    const result = computeShiftDaily(shift, job, []);
+
+    expect(result.regularSegments).toHaveLength(1);
+    expect(result.regularSegments[0]).toMatchObject({ rateLabel: 'night', hours: 8 });
+    expect(result.regularPay).toBeCloseTo(8 * 30);
+
+    expect(result.overtimeSegments).toHaveLength(2);
+    const [otNight, otDay] = result.overtimeSegments;
+    expect(otNight).toMatchObject({ rateLabel: 'night', hours: 2, multiplier: 1.5, rate: 45 });
+    expect(otDay).toMatchObject({ rateLabel: 'morning', hours: 2, multiplier: 1.5, rate: 30 });
+    expect(result.overtimePay).toBeCloseTo(2 * 45 + 2 * 30);
+    expect(result.grossPay).toBeCloseTo(240 + 90 + 60);
+  });
+
+  it('nightRateEndsAt=null preserves the original whole-shift behavior (no split)', () => {
+    const job = createDefaultJob({ morningRate: 20, nightRate: 30, nightRateStartsAt: '18:00', nightRateEndsAt: null });
+    const shift = makeShift({ startTime: '22:00', endTime: '08:00' }); // would split if a window were configured
+    const result = computeShiftDaily(shift, job, []);
+    expect(result.regularSegments).toHaveLength(1);
+    expect(result.regularSegments[0]).toMatchObject({ rateLabel: 'night', hours: 10 });
+  });
+});
+
 describe('computeWeekPay — weekly overtime reconciliation', () => {
   it('leaves shifts alone when weekly threshold is not configured', () => {
     const job = createDefaultJob({ morningRate: 20 });
@@ -221,5 +289,30 @@ describe('computeWeekPay — weekly overtime reconciliation', () => {
     expect(result.shiftBreakdowns[0].superAmount).toBeCloseTo(19.2);
     expect(result.totalGrossPay).toBeCloseTo(160);
     expect(result.totalSuper).toBeCloseTo(19.2);
+  });
+
+  it('escalates weekly OT from the end of a mixed night/day shift, tagging it with the correct rate', () => {
+    const job = createDefaultJob({
+      morningRate: 20,
+      nightRate: 30,
+      nightRateStartsAt: '18:00',
+      nightRateEndsAt: '06:00',
+      overtimeThresholdHoursPerWeek: 8,
+      overtimeTiers: [{ hoursInTier: Infinity, multiplier: 1.5 }],
+    });
+    // Single 10h shift: 8h night (22:00-06:00) + 2h day (06:00-08:00). Weekly threshold of 8h
+    // means the trailing 2h (the day portion) becomes weekly OT, not the night portion.
+    const shifts = [makeShift({ startTime: '22:00', endTime: '08:00' })];
+    const result = computeWeekPay(shifts, job, []);
+    const breakdown = result.shiftBreakdowns[0];
+
+    expect(breakdown.finalRegularSegments).toHaveLength(1);
+    expect(breakdown.finalRegularSegments[0]).toMatchObject({ rateLabel: 'night', hours: 8 });
+    expect(breakdown.finalRegularPay).toBeCloseTo(8 * 30);
+
+    expect(breakdown.weeklyOvertimeSegments).toHaveLength(1);
+    expect(breakdown.weeklyOvertimeSegments[0]).toMatchObject({ rateLabel: 'morning', hours: 2, multiplier: 1.5, rate: 30 });
+    expect(breakdown.weeklyOvertimePay).toBeCloseTo(2 * 20 * 1.5);
+    expect(breakdown.finalGrossPay).toBeCloseTo(240 + 60);
   });
 });

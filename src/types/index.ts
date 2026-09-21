@@ -26,6 +26,14 @@ export interface Job {
   nightLoadingPercent: number;
   /** "HH:mm" — a shift starting at or after this time uses nightRate, otherwise morningRate. */
   nightRateStartsAt: string;
+  /**
+   * "HH:mm", or null. When set, defines a night-rate *window* [nightRateStartsAt,
+   * nightRateEndsAt) that wraps past midnight (e.g. 18:00 to 06:00) — a single shift that
+   * runs past nightRateEndsAt is split, with hours after that point paid at morningRate
+   * instead. When null (the default), night rate is decided once from the shift's start
+   * time and applies to the whole shift, as before.
+   */
+  nightRateEndsAt: string | null;
 
   saturdayMultiplier: number;
   sundayMultiplier: number;
@@ -90,6 +98,7 @@ export function normalizeJob(job: Job): Job {
     nightRateMode: job.nightRateMode ?? 'custom',
     nightLoadingPercent: job.nightLoadingPercent ?? 21,
     taxable: job.taxable ?? true,
+    nightRateEndsAt: job.nightRateEndsAt ?? null,
   };
 }
 
@@ -105,6 +114,7 @@ export function createDefaultJob(overrides: Partial<Job> = {}): Job {
     nightRateMode: 'auto',
     nightLoadingPercent: 21,
     nightRateStartsAt: '14:00',
+    nightRateEndsAt: null,
     saturdayMultiplier: 1.5,
     sundayMultiplier: 2,
     publicHolidayMultiplier: 1,

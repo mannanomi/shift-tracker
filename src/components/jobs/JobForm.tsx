@@ -156,6 +156,32 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
               />
             </div>
           </Field>
+
+          <Checkbox
+            label="Night rate ends at a set time"
+            checked={form.nightRateEndsAt !== null}
+            onChange={(e) => update('nightRateEndsAt', e.target.checked ? '06:00' : null)}
+          />
+          {form.nightRateEndsAt !== null && (
+            <>
+              <Field label="Night rate ends at (switches back to day rate)">
+                <div className="relative">
+                  <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                  <Input
+                    type="time"
+                    required
+                    className="pl-9"
+                    value={form.nightRateEndsAt}
+                    onChange={(e) => update('nightRateEndsAt', e.target.value)}
+                  />
+                </div>
+              </Field>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                For an overnight shift that runs past this time — e.g. starts 6pm, finishes 8am — the hours after{' '}
+                {form.nightRateEndsAt} are paid at the day rate instead, even though it's one shift.
+              </p>
+            </>
+          )}
         </div>
       </Section>
 
