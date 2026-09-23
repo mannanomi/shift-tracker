@@ -1,8 +1,15 @@
 import { useMemo, useState } from 'react';
-import { Banknote, CalendarRange, Home, Inbox, Plus, Wallet } from 'lucide-react';
+import { Banknote, CalendarRange, Clock, Home, Inbox, Plus, Sunrise, Wallet } from 'lucide-react';
 import { useJobs, usePublicHolidays, useSettings, useShifts } from '../hooks/useData';
-import { buildRangeReport } from '../lib/payCalculation/reports';
-import { endOfFortnightStr, endOfWeekStr, formatDateOnly, startOfFortnightStr, startOfWeekStr } from '../lib/dateUtils';
+import { buildRangeReport, type ShiftLine } from '../lib/payCalculation/reports';
+import {
+  endOfFortnightStr,
+  endOfWeekStr,
+  formatDateOnly,
+  resolveShiftTimes,
+  startOfFortnightStr,
+  startOfWeekStr,
+} from '../lib/dateUtils';
 import { formatCurrency, formatHours } from '../lib/format';
 import { estimateNetForPeriod } from '../lib/tax/auIncomeTax';
 import { Card } from '../components/ui/Card';
@@ -36,6 +43,22 @@ export function Dashboard() {
     return buildRangeReport(start, end, jobs, shifts, publicHolidays, settings.weekStartDay);
   }, [jobs, shifts, publicHolidays, settings, today]);
 
+  const todayReport = useMemo(() => {
+    if (!jobs || !shifts || !publicHolidays || !settings) return null;
+    return buildRangeReport(today, today, jobs, shifts, publicHolidays, settings.weekStartDay);
+  }, [jobs, shifts, publicHolidays, settings, today]);
+
+  const upcomingShift: ShiftLine | null = useMemo(() => {
+    if (!todayReport) return null;
+    const now = new Date();
+    const notYetFinished = todayReport.shiftLines.filter((line) => {
+      const { end } = resolveShiftTimes(line.shift.date, line.shift.startTime, line.shift.endTime);
+      return end > now;
+    });
+    notYetFinished.sort((a, b) => a.shift.startTime.localeCompare(b.shift.startTime));
+    return notYetFinished[0] ?? null;
+  }, [todayReport]);
+
   if (!weekReport || !fortnightReport) return null;
 
   const hasCashJob = (jobs ?? []).some((j) => !j.taxable);
@@ -51,6 +74,10 @@ export function Dashboard() {
           </Button>
         }
       />
+
+      <UpcomingShiftCard line={upcomingShift} />
+
+      <WeekTotalCard report={weekReport} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <TotalsCard title="This week" report={weekReport} periodsPerYear={52} />
@@ -79,6 +106,50 @@ export function Dashboard() {
         </Modal>
       )}
     </div>
+  );
+}
+
+function UpcomingShiftCard({ line }: { line: ShiftLine | null }) {
+  return (
+    <Card>
+      <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+        <Sunrise className="h-4 w-4" />
+        <h2 className="text-sm font-medium">Upcoming shift today</h2>
+      </div>
+      {line ? (
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <Badge color={line.job.color}>{line.job.name}</Badge>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {line.shift.startTime}–{line.shift.endTime} · {formatHours(line.breakdown.workedHours)}
+            </p>
+          </div>
+          <p className="shrink-0 text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {formatCurrency(line.breakdown.finalGrossPay)}
+          </p>
+        </div>
+      ) : (
+        <div className="mt-1">
+          <EmptyState icon={<Clock className="h-5 w-5" />} title="No upcoming shift today" />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function WeekTotalCard({ report }: { report: ReturnType<typeof buildRangeReport> }) {
+  return (
+    <Card>
+      <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+        <Clock className="h-4 w-4" />
+        <h2 className="text-sm font-medium">This week — total</h2>
+      </div>
+      <p className="mt-1.5 text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{formatCurrency(report.totalGrossPay)}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+        Total income (taxable + cash combined)
+      </p>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{formatHours(report.totalHours)} worked this week</p>
+    </Card>
   );
 }
 
