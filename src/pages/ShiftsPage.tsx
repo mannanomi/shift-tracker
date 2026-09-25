@@ -127,7 +127,7 @@ export function ShiftsPage() {
       )}
 
       {viewMode === 'list' && (
-        <div className="space-y-2">
+        <div className="grid gap-2 lg:grid-cols-2 lg:items-start">
           {listLines.length === 0 && (
             <Card>
               <EmptyState icon={<Inbox className="h-5 w-5" />} title="No shifts logged yet" subtitle="Tap Add shift to log your first one" />

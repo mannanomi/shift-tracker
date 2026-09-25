@@ -64,7 +64,7 @@ export function Dashboard() {
   const hasCashJob = (jobs ?? []).some((j) => !j.taxable);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:space-y-6">
       <PageHeader
         icon={<Home className="h-5 w-5" />}
         title="Dashboard"
@@ -75,9 +75,10 @@ export function Dashboard() {
         }
       />
 
-      <UpcomingShiftCard line={upcomingShift} />
-
-      <WeekTotalCard report={weekReport} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <UpcomingShiftCard line={upcomingShift} />
+        <WeekTotalCard report={weekReport} />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <TotalsCard title="This week" report={weekReport} periodsPerYear={52} />

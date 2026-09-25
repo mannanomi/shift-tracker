@@ -64,7 +64,7 @@ export function ShiftCalendar({
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-1 lg:gap-2">
         {days.map((day) => {
           const dateStr = formatDateOnly(day);
           const inMonth = day.getMonth() === month.getMonth();
@@ -77,7 +77,7 @@ export function ShiftCalendar({
             <button
               key={dateStr}
               onClick={() => onSelectDate(dateStr)}
-              className={`flex aspect-square flex-col items-center justify-start gap-0.5 rounded-lg pt-1 text-xs ${
+              className={`flex aspect-square flex-col items-center justify-start gap-0.5 rounded-lg pt-1 text-xs lg:aspect-auto lg:h-24 lg:gap-1 lg:pt-2 lg:text-sm ${
                 inMonth ? 'text-slate-700 dark:text-slate-300' : 'text-slate-300 dark:text-slate-700'
               } ${isToday ? 'ring-1 ring-brand-400 dark:ring-brand-500' : ''} ${
                 lines.length > 0 ? 'bg-slate-50 dark:bg-slate-700/40' : 'hover:bg-slate-50 dark:hover:bg-slate-700/40'
@@ -93,7 +93,7 @@ export function ShiftCalendar({
                   ))}
                 </div>
               )}
-              {dayTotal > 0 && <span className="text-[9px] leading-none text-slate-400 dark:text-slate-500">${Math.round(dayTotal)}</span>}
+              {dayTotal > 0 && <span className="text-[9px] leading-none lg:text-xs text-slate-400 dark:text-slate-500">${Math.round(dayTotal)}</span>}
             </button>
           );
         })}

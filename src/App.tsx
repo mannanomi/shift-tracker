@@ -6,18 +6,24 @@ import {
   CalendarDays,
   ChevronRight,
   Clock,
+  Cloud,
   Home,
   MoreHorizontal,
   Settings as SettingsIcon,
   Timer,
 } from 'lucide-react';
+import { ThemeToggle } from './components/ui/ThemeToggle';
 import { ensureSeeded } from './db/repository';
+import { cloudEnabled } from './lib/supabase/client';
+import { startSync } from './lib/supabase/sync';
+import { useSession } from './hooks/useAuth';
 import { Dashboard } from './pages/Dashboard';
 import { ShiftsPage } from './pages/ShiftsPage';
 import { JobsPage } from './pages/JobsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { PublicHolidaysPage } from './pages/PublicHolidaysPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { AccountPage } from './pages/AccountPage';
 import { PageHeader } from './components/ui/PageHeader';
 
 const NAV_ITEMS = [
@@ -28,26 +34,119 @@ const NAV_ITEMS = [
   { to: '/more', label: 'More', Icon: MoreHorizontal },
 ];
 
-function App() {
+const SIDEBAR_ITEMS = [
+  { to: '/', label: 'Dashboard', Icon: Home },
+  { to: '/shifts', label: 'Shifts', Icon: Clock },
+  { to: '/reports', label: 'Reports', Icon: BarChart3 },
+  { to: '/jobs', label: 'Jobs', Icon: Briefcase },
+  { to: '/holidays', label: 'Public holidays', Icon: CalendarDays },
+  { to: '/account', label: 'Account', Icon: Cloud },
+  { to: '/settings', label: 'Settings', Icon: SettingsIcon },
+];
+
+function Splash({ message }: { message: string }) {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-50 text-slate-400 dark:bg-slate-900 dark:text-slate-500">
+      <Timer className="h-8 w-8 animate-pulse text-brand-500" />
+      <p className="text-sm font-medium">{message}</p>
+    </div>
+  );
+}
+
+type DataState = { userId: string | null; status: 'loading' | 'ready' | 'error'; error?: string };
+
+/** Local-only mode (no cloud configured): seed and go. */
+function useLocalReady(enabled: boolean) {
   const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (enabled) ensureSeeded().then(() => setReady(true));
+  }, [enabled]);
+  return ready;
+}
+
+function App() {
+  const { session, loading } = useSession();
+  const localReady = useLocalReady(!cloudEnabled);
+  const userId = session?.user.id ?? null;
+  const [data, setData] = useState<DataState>({ userId: null, status: 'loading' });
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    ensureSeeded().then(() => setReady(true));
-  }, []);
+    if (!cloudEnabled || !userId) return;
+    let stop: (() => void) | undefined;
+    let cancelled = false;
+    setData({ userId, status: 'loading' });
+    startSync(userId)
+      .then((s) => {
+        if (cancelled) return s();
+        stop = s;
+        setData({ userId, status: 'ready' });
+      })
+      .catch((err) => {
+        if (!cancelled) setData({ userId, status: 'error', error: err?.message ?? 'Could not load your data.' });
+      });
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [userId, attempt]);
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-50 text-slate-400 dark:bg-slate-900 dark:text-slate-500">
-        <Timer className="h-8 w-8 animate-pulse text-brand-500" />
-        <p className="text-sm font-medium">Loading Shift Tracker…</p>
-      </div>
-    );
+  if (!cloudEnabled) {
+    if (!localReady) return <Splash message="Loading Shift Tracker…" />;
+  } else {
+    if (loading) return <Splash message="Loading Shift Tracker…" />;
+    if (!session) return <LoginScreen />;
+    if (data.userId !== userId || data.status === 'loading') return <Splash message="Syncing your data…" />;
+    if (data.status === 'error') {
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-50 p-6 text-center dark:bg-slate-900">
+          <p className="text-sm text-red-600 dark:text-red-400">{data.error}</p>
+          <button className="text-sm font-medium text-brand-600 dark:text-brand-400" onClick={() => setAttempt((n) => n + 1)}>
+            Try again
+          </button>
+        </div>
+      );
+    }
   }
 
   return (
     <HashRouter>
-      <div className="mx-auto flex min-h-screen max-w-2xl flex-col bg-slate-50 dark:bg-slate-900">
-        <main className="flex-1 px-4 pb-24 pt-6" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)' }}>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 lg:flex dark:border-slate-800 dark:bg-slate-900">
+        <div className="mb-8 flex items-center gap-2.5 px-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white">
+            <Timer className="h-5 w-5" />
+          </span>
+          <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">Shift Tracker</span>
+        </div>
+        <nav className="flex flex-1 flex-col gap-1">
+          {SIDEBAR_ITEMS.map(({ to, label, Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+                }`
+              }
+            >
+              <Icon className="h-5 w-5" strokeWidth={2.1} />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="px-1 pt-4">
+          <ThemeToggle />
+        </div>
+      </aside>
+      <div className="mx-auto flex min-h-screen max-w-2xl flex-col lg:ml-64 lg:max-w-none">
+        <main
+          className="mx-auto w-full flex-1 px-4 pb-24 pt-6 lg:max-w-6xl lg:px-10 lg:pb-12 lg:pt-10"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)' }}
+        >
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/shifts" element={<ShiftsPage />} />
@@ -55,11 +154,12 @@ function App() {
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/holidays" element={<PublicHolidaysPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/account" element={<AccountPage />} />
             <Route path="/more" element={<MorePage />} />
           </Routes>
         </main>
 
-        <nav className="fixed bottom-0 left-1/2 w-full max-w-2xl -translate-x-1/2 border-t border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-slate-800 dark:bg-slate-900/95 dark:supports-[backdrop-filter]:bg-slate-900/80"
+        <nav className="fixed bottom-0 left-1/2 w-full max-w-2xl -translate-x-1/2 border-t lg:hidden border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-slate-800 dark:bg-slate-900/95 dark:supports-[backdrop-filter]:bg-slate-900/80"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
           <div className="flex justify-around px-1 py-1.5">
@@ -83,7 +183,22 @@ function App() {
           </div>
         </nav>
       </div>
+      </div>
     </HashRouter>
+  );
+}
+
+function LoginScreen() {
+  return (
+    <div className="min-h-screen bg-slate-50 px-4 pt-16 dark:bg-slate-900">
+      <div className="mx-auto mb-6 flex max-w-md items-center justify-center gap-2.5">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white">
+          <Timer className="h-5 w-5" />
+        </span>
+        <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Shift Tracker</span>
+      </div>
+      <AccountPage />
+    </div>
   );
 }
 
@@ -93,6 +208,7 @@ function MorePage() {
       <PageHeader icon={<MoreHorizontal className="h-5 w-5" />} title="More" />
       <div className="space-y-2.5">
         <MoreLink to="/holidays" label="Public holidays" subtitle="Manage SA public holiday dates" icon={CalendarDays} />
+        <MoreLink to="/account" label="Account" subtitle="Sign in to sync across devices" icon={Cloud} />
         <MoreLink to="/settings" label="Settings" subtitle="Week start day, fortnight cycle" icon={SettingsIcon} />
       </div>
     </div>
