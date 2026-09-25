@@ -168,3 +168,14 @@ export async function findDuplicateShiftIds(): Promise<string[]> {
 export async function removeShifts(ids: string[]): Promise<void> {
   for (const id of ids) await shiftsRepo.remove(id);
 }
+
+export async function countShiftsForJob(jobId: string): Promise<number> {
+  return db.shifts.where('jobId').equals(jobId).count();
+}
+
+/** Deletes a job and every shift logged under it. */
+export async function deleteJobWithShifts(jobId: string): Promise<void> {
+  const shifts = await db.shifts.where('jobId').equals(jobId).toArray();
+  await removeShifts(shifts.map((s) => s.id));
+  await jobsRepo.remove(jobId);
+}

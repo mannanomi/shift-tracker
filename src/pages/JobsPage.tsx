@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Archive, ArchiveRestore, Briefcase, Pencil, Plus } from 'lucide-react';
+import { Archive, ArchiveRestore, Briefcase, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { Job } from '../types';
 import { useJobs } from '../hooks/useData';
-import { jobsRepo } from '../db/repository';
+import { countShiftsForJob, deleteJobWithShifts, jobsRepo } from '../db/repository';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -17,6 +17,13 @@ export function JobsPage() {
 
   async function toggleArchive(job: Job) {
     await jobsRepo.put({ ...job, archived: !job.archived, updatedAt: new Date().toISOString() });
+  }
+
+  async function handleDelete(job: Job) {
+    const count = await countShiftsForJob(job.id);
+    const detail = count > 0 ? ` and its ${count} shift${count === 1 ? '' : 's'}` : '';
+    if (!confirm(`Delete "${job.name}"${detail}? This can't be undone.`)) return;
+    await deleteJobWithShifts(job.id);
   }
 
   return (
@@ -65,7 +72,7 @@ export function JobsPage() {
                   {job.includeSuper && ` · Super ${job.superRatePercent}%`}
                 </p>
               </div>
-              <div className="flex shrink-0 gap-1.5">
+              <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
                 <Button variant="secondary" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditingJob(job)}>
                   Edit
                 </Button>
@@ -75,6 +82,13 @@ export function JobsPage() {
                   onClick={() => toggleArchive(job)}
                 >
                   {job.archived ? 'Unarchive' : 'Archive'}
+                </Button>
+                <Button
+                  variant="danger"
+                  icon={<Trash2 className="h-3.5 w-3.5" />}
+                  onClick={() => handleDelete(job)}
+                >
+                  Delete
                 </Button>
               </div>
             </div>
