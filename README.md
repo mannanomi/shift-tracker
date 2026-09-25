@@ -1,6 +1,8 @@
 # Shift Tracker
 
-A personal web app for tracking work shifts across multiple jobs and calculating earnings — built for South Australia (Australia/Adelaide timezone), fully local, no backend, no login.
+A web app for tracking work shifts across multiple jobs and calculating Australian casual earnings — pay rules, loadings, overtime, and a take-home estimate after tax. Built for the Australia/Adelaide timezone.
+
+Local-first: it works fully offline with no account. Cloud sync is optional and off unless configured.
 
 Live: https://shift-tracker-nu.vercel.app
 
@@ -15,11 +17,21 @@ Live: https://shift-tracker-nu.vercel.app
 
 ## Data & privacy
 
-All data is stored locally in the browser via IndexedDB (Dexie.js). Nothing is sent to a server — there's no account, no login, and no backend.
+All data is written first to IndexedDB in the browser (Dexie.js), and the app is fully usable with no account and no network.
+
+Cloud sync activates only when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set — without them `cloudEnabled` is false and no Supabase client is ever constructed. When it is enabled and you sign in, local writes queue into an outbox and drain to Supabase, while remote changes are pulled with a per-user cursor, so the app keeps working through a dropped connection and reconciles afterwards.
+
+## How the pay engine works
+
+Australian casual pay has more edge cases than it looks. A single shift can cross the morning/night rate boundary, land on a public holiday, push the day over a daily overtime threshold *and* push the week over a weekly one — and the loadings interact.
+
+All of that lives in `src/lib/payCalculation/`, isolated from the UI and covered by unit tests. The app never recomputes pay in a component; every view calls the engine and renders a full worked breakdown, so any number shown can be traced back to the rule that produced it. The tax estimate is separate again, in `src/lib/tax/`, implementing resident brackets, the Low Income Tax Offset and the Medicare levy.
+
+`npm test` runs 35 tests across the pay engine, reporting, and the tax calculation.
 
 ## Tech stack
 
-React + TypeScript + Vite, Tailwind CSS, Dexie.js, date-fns, Recharts.
+React + TypeScript + Vite, Tailwind CSS, Dexie.js (IndexedDB), Supabase (optional sync), date-fns-tz, Recharts, vite-plugin-pwa.
 
 ## Development
 
