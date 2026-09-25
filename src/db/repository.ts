@@ -150,3 +150,21 @@ export async function importBackup(data: unknown): Promise<void> {
   });
   changeListener?.();
 }
+
+/** Shifts that repeat another shift's job, date and times. Keeps one (preferring one with notes). */
+export async function findDuplicateShiftIds(): Promise<string[]> {
+  const shifts = await db.shifts.toArray();
+  shifts.sort((a, b) => Number(Boolean(b.notes)) - Number(Boolean(a.notes)) || a.id.localeCompare(b.id));
+  const seen = new Set<string>();
+  const duplicates: string[] = [];
+  for (const s of shifts) {
+    const key = `${s.jobId}|${s.date}|${s.startTime}|${s.endTime}`;
+    if (seen.has(key)) duplicates.push(s.id);
+    else seen.add(key);
+  }
+  return duplicates;
+}
+
+export async function removeShifts(ids: string[]): Promise<void> {
+  for (const id of ids) await shiftsRepo.remove(id);
+}

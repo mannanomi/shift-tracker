@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
-import { Download, Settings as SettingsIcon, Upload } from 'lucide-react';
+import { Copy, Download, Settings as SettingsIcon, Upload } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useSettings } from '../hooks/useData';
-import { exportBackup, importBackup, settingsRepo } from '../db/repository';
+import { exportBackup, findDuplicateShiftIds, importBackup, removeShifts, settingsRepo } from '../db/repository';
 import { Card } from '../components/ui/Card';
 import { Field, Input, Select } from '../components/ui/Field';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -24,6 +24,17 @@ export function SettingsPage() {
     a.click();
     URL.revokeObjectURL(url);
     setMessage('Backup downloaded.');
+  }
+
+  async function handleDedupe() {
+    const ids = await findDuplicateShiftIds();
+    if (ids.length === 0) {
+      setMessage('No duplicate shifts found.');
+      return;
+    }
+    if (!confirm(`Found ${ids.length} duplicate shift(s) (same job, date and times). Remove the extra copies?`)) return;
+    await removeShifts(ids);
+    setMessage(`Removed ${ids.length} duplicate shift(s).`);
   }
 
   async function handleImport(file: File) {
@@ -84,6 +95,9 @@ export function SettingsPage() {
           </Button>
           <Button variant="secondary" icon={<Upload className="h-4 w-4" />} onClick={() => fileRef.current?.click()}>
             Restore from backup
+          </Button>
+          <Button variant="secondary" icon={<Copy className="h-4 w-4" />} onClick={handleDedupe}>
+            Remove duplicate shifts
           </Button>
           <input
             ref={fileRef}
