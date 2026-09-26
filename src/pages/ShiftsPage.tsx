@@ -12,10 +12,11 @@ import { Modal } from '../components/ui/Modal';
 import { PageHeader } from '../components/ui/PageHeader';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ShiftForm } from '../components/shifts/ShiftForm';
+import { toast } from '../components/ui/Toast';
 import { ShiftLineCard } from '../components/shifts/ShiftLineCard';
 import { ShiftCalendar, getCalendarGridRange } from '../components/shifts/ShiftCalendar';
 
-type FormTarget = { mode: 'new'; date?: string } | { mode: 'edit'; shift: Shift };
+type FormTarget = { mode: 'new'; date?: string; template?: Partial<Shift> } | { mode: 'edit'; shift: Shift };
 type ViewMode = 'calendar' | 'list';
 
 export function ShiftsPage() {
@@ -60,8 +61,15 @@ export function ShiftsPage() {
     return map;
   }, [calendarReport]);
 
-  async function handleDelete(id: string) {
-    if (confirm('Delete this shift?')) await shiftsRepo.remove(id);
+  async function handleDelete(shift: Shift) {
+    await shiftsRepo.remove(shift.id);
+    toast('Shift deleted', { label: 'Undo', onClick: () => void shiftsRepo.put(shift) });
+  }
+
+  function handleCopy(shift: Shift) {
+    const { id: _id, ...rest } = shift;
+    setSelectedDate(null);
+    setFormTarget({ mode: 'new', template: { ...rest, date: formatDateOnly(addDays(parseDateOnly(shift.date), 7)) } });
   }
 
   if (!listReport || !calendarReport) return null;
@@ -142,7 +150,8 @@ export function ShiftsPage() {
               expanded={expandedId === shift.id}
               onToggleExpand={() => setExpandedId(expandedId === shift.id ? null : shift.id)}
               onEdit={() => setFormTarget({ mode: 'edit', shift })}
-              onDelete={() => handleDelete(shift.id)}
+              onDelete={() => handleDelete(shift)}
+                onCopy={() => handleCopy(shift)}
             />
           ))}
         </div>
@@ -172,7 +181,8 @@ export function ShiftsPage() {
                   setSelectedDate(null);
                   setFormTarget({ mode: 'edit', shift });
                 }}
-                onDelete={() => handleDelete(shift.id)}
+                onDelete={() => handleDelete(shift)}
+                onCopy={() => handleCopy(shift)}
               />
             ))}
             <div className="flex justify-end pt-2">
@@ -197,6 +207,7 @@ export function ShiftsPage() {
           <ShiftForm
             shift={formTarget.mode === 'edit' ? formTarget.shift : undefined}
             initialDate={formTarget.mode === 'new' ? formTarget.date : undefined}
+            template={formTarget.mode === 'new' ? formTarget.template : undefined}
             onDone={() => setFormTarget(null)}
           />
         </Modal>

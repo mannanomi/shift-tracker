@@ -2,7 +2,7 @@
  * Simplified Australian resident individual income tax estimate: the 2024–25 "Stage 3" tax
  * brackets, the Low Income Tax Offset, and an approximation of the Medicare levy low-income
  * phase-in. This is a ballpark for take-home pay, not a substitute for a payslip or tax
- * return — it ignores HECS/HELP repayments, private health insurance rebate/surcharge, other
+ * return — HECS/HELP is optional (see helpRepayment); it ignores private health insurance rebate/surcharge, other
  * income, and the Medicare levy family/dependent thresholds. Brackets are not auto-indexed;
  * re-check against the current ATO rates if precision matters.
  */
@@ -47,26 +47,45 @@ function medicareLevy(taxableIncome: number): number {
   return 0.02 * taxableIncome;
 }
 
+/**
+ * HECS/HELP compulsory repayment under the marginal system introduced from 2025–26: nothing up
+ * to $67,000, 15c per dollar above that up to $125,000, then $8,700 + 17c per dollar above
+ * $125,000. Uses taxable income as a stand-in for repayment income (which also adds things like
+ * reportable fringe benefits). Thresholds are indexed each year — re-check against the ATO.
+ */
+export function helpRepayment(income: number): number {
+  if (income <= 67_000) return 0;
+  if (income <= 125_000) return 0.15 * (income - 67_000);
+  return 8_700 + 0.17 * (income - 125_000);
+}
+
+export interface TaxOptions {
+  helpDebt?: boolean;
+}
+
 export interface AnnualTaxEstimate {
   annualTaxableIncome: number;
   incomeTax: number;
   lito: number;
   medicareLevy: number;
+  helpRepayment: number;
   totalTax: number;
   netIncome: number;
 }
 
-export function estimateAnnualTax(annualTaxableIncome: number): AnnualTaxEstimate {
+export function estimateAnnualTax(annualTaxableIncome: number, options: TaxOptions = {}): AnnualTaxEstimate {
   const grossTax = incomeTaxFor(annualTaxableIncome);
   const lito = Math.min(grossTax, lowIncomeTaxOffset(annualTaxableIncome));
   const incomeTax = grossTax - lito;
   const levy = medicareLevy(annualTaxableIncome);
-  const totalTax = incomeTax + levy;
+  const help = options.helpDebt ? helpRepayment(annualTaxableIncome) : 0;
+  const totalTax = incomeTax + levy + help;
   return {
     annualTaxableIncome,
     incomeTax,
     lito,
     medicareLevy: levy,
+    helpRepayment: help,
     totalTax,
     netIncome: annualTaxableIncome - totalTax,
   };
@@ -85,8 +104,12 @@ export interface PeriodTaxEstimate {
  * ATO's own PAYG withholding formulas use, so it tracks real take-home pay reasonably well
  * even though actual per-paycheck withholding depends on each employer's own calculation.
  */
-export function estimateNetForPeriod(periodGrossIncome: number, periodsPerYear: number): PeriodTaxEstimate {
-  const annual = estimateAnnualTax(periodGrossIncome * periodsPerYear);
+export function estimateNetForPeriod(
+  periodGrossIncome: number,
+  periodsPerYear: number,
+  options: TaxOptions = {},
+): PeriodTaxEstimate {
+  const annual = estimateAnnualTax(periodGrossIncome * periodsPerYear, options);
   const periodTax = annual.totalTax / periodsPerYear;
   return {
     periodGrossIncome,

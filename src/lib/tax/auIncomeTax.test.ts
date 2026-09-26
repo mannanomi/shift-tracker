@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateAnnualTax, estimateNetForPeriod } from './auIncomeTax';
+import { estimateAnnualTax, estimateNetForPeriod, helpRepayment } from './auIncomeTax';
 
 describe('estimateAnnualTax', () => {
   it('charges no tax below the tax-free threshold', () => {
@@ -42,5 +42,25 @@ describe('estimateNetForPeriod', () => {
     const fortnightResult = estimateNetForPeriod(annualIncome / 26, 26);
     const weeklyResult = estimateNetForPeriod(annualIncome / 52, 52);
     expect(fortnightResult.periodTax).toBeCloseTo(weeklyResult.periodTax * 2, 0);
+  });
+});
+
+describe('helpRepayment', () => {
+  it('is nil at or below the $67,000 threshold', () => {
+    expect(helpRepayment(50_000)).toBe(0);
+    expect(helpRepayment(67_000)).toBe(0);
+  });
+
+  it('charges 15c per dollar above $67,000, then 17c above $125,000', () => {
+    expect(helpRepayment(77_000)).toBeCloseTo(1_500);
+    expect(helpRepayment(125_000)).toBeCloseTo(8_700);
+    expect(helpRepayment(135_000)).toBeCloseTo(10_400);
+  });
+
+  it('is only added to the tax estimate when the user has a HELP debt', () => {
+    const without = estimateAnnualTax(90_000);
+    const withHelp = estimateAnnualTax(90_000, { helpDebt: true });
+    expect(without.helpRepayment).toBe(0);
+    expect(withHelp.totalTax - without.totalTax).toBeCloseTo(3_450);
   });
 });

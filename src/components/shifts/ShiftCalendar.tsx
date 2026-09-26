@@ -77,10 +77,11 @@ export function ShiftCalendar({
             <button
               key={dateStr}
               onClick={() => onSelectDate(dateStr)}
+              style={jobColors.length > 0 ? { backgroundColor: `${jobColors[0]}22` } : undefined}
               className={`flex aspect-square flex-col items-center justify-start gap-0.5 rounded-lg pt-1 text-xs lg:aspect-auto lg:h-24 lg:gap-1 lg:pt-2 lg:text-sm ${
                 inMonth ? 'text-slate-700 dark:text-slate-300' : 'text-slate-300 dark:text-slate-700'
               } ${isToday ? 'ring-1 ring-brand-400 dark:ring-brand-500' : ''} ${
-                lines.length > 0 ? 'bg-slate-50 dark:bg-slate-700/40' : 'hover:bg-slate-50 dark:hover:bg-slate-700/40'
+                lines.length > 0 ? '' : 'hover:bg-slate-50 dark:hover:bg-slate-700/40'
               }`}
             >
               <span className={isToday ? 'font-semibold text-brand-600 dark:text-brand-400' : ''}>

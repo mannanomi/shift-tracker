@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { HashRouter, NavLink, Route, Routes } from 'react-router-dom';
 import {
   BarChart3,
@@ -25,6 +26,11 @@ import { PublicHolidaysPage } from './pages/PublicHolidaysPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AccountPage } from './pages/AccountPage';
 import { PageHeader } from './components/ui/PageHeader';
+import { AppSkeleton } from './components/ui/Skeleton';
+import { Toaster } from './components/ui/Toast';
+import { Modal } from './components/ui/Modal';
+import { QuickAddSheet } from './components/shifts/QuickAddSheet';
+import { ShiftForm } from './components/shifts/ShiftForm';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Home', Icon: Home },
@@ -45,11 +51,37 @@ const SIDEBAR_ITEMS = [
 ];
 
 function Splash({ message }: { message: string }) {
+  return <AppSkeleton message={message} />;
+}
+
+/** Floating + button that opens one-tap Quick add (with a way through to the full form). */
+function QuickAddButton() {
+  const [open, setOpen] = useState(false);
+  const [fullFormDate, setFullFormDate] = useState<string | null>(null);
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-50 text-slate-400 dark:bg-slate-900 dark:text-slate-500">
-      <Timer className="h-8 w-8 animate-pulse text-brand-500" />
-      <p className="text-sm font-medium">{message}</p>
-    </div>
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        aria-label="Quick add shift"
+        className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition-transform hover:bg-brand-700 active:scale-95 print:hidden bottom-[calc(env(safe-area-inset-bottom)+5rem)] lg:bottom-8 lg:right-8"
+      >
+        <Plus className="h-6 w-6" strokeWidth={2.4} />
+      </button>
+      {open && (
+        <QuickAddSheet
+          onClose={() => setOpen(false)}
+          onMoreOptions={(date) => {
+            setOpen(false);
+            setFullFormDate(date);
+          }}
+        />
+      )}
+      {fullFormDate && (
+        <Modal title="Add shift" onClose={() => setFullFormDate(null)}>
+          <ShiftForm initialDate={fullFormDate} onDone={() => setFullFormDate(null)} />
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -112,7 +144,7 @@ function App() {
   return (
     <HashRouter>
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 lg:flex dark:border-slate-800 dark:bg-slate-900">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col print:hidden border-r border-slate-200 bg-white px-4 py-6 lg:flex dark:border-slate-800 dark:bg-slate-900">
         <div className="mb-8 flex items-center gap-2.5 px-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white">
             <Timer className="h-5 w-5" />
@@ -142,7 +174,7 @@ function App() {
           <ThemeToggle />
         </div>
       </aside>
-      <div className="mx-auto flex min-h-screen max-w-2xl flex-col lg:ml-64 lg:max-w-none">
+      <div className="mx-auto flex min-h-screen max-w-2xl flex-col lg:ml-64 lg:max-w-none print:ml-0">
         <main
           className="mx-auto w-full flex-1 px-4 pb-24 pt-6 lg:max-w-6xl lg:px-10 lg:pb-12 lg:pt-10"
           style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)' }}
@@ -159,7 +191,7 @@ function App() {
           </Routes>
         </main>
 
-        <nav className="fixed bottom-0 left-1/2 w-full max-w-2xl -translate-x-1/2 border-t lg:hidden border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-slate-800 dark:bg-slate-900/95 dark:supports-[backdrop-filter]:bg-slate-900/80"
+        <nav className="fixed bottom-0 left-1/2 z-30 w-full max-w-2xl -translate-x-1/2 border-t lg:hidden print:hidden border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-slate-800 dark:bg-slate-900/95 dark:supports-[backdrop-filter]:bg-slate-900/80"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
           <div className="flex justify-around px-1 py-1.5">
@@ -183,6 +215,8 @@ function App() {
           </div>
         </nav>
       </div>
+      <QuickAddButton />
+      <Toaster />
       </div>
     </HashRouter>
   );

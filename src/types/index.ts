@@ -90,6 +90,28 @@ export interface AppSettings {
   weekStartDay: 0 | 1;
   /** Any ISO date that falls on the first day of a fortnight, used to align the fortnight cycle. */
   fortnightAnchorDate: string;
+  /** Include HECS/HELP compulsory repayments in after-tax estimates. */
+  hasHelpDebt?: boolean;
+  /** Spending/savings targets that each fortnight's take-home pay is measured against. */
+  goals?: Goal[];
+  /** What employers actually paid, for comparing against calculated pay. */
+  payslips?: Payslip[];
+}
+
+export interface Goal {
+  id: string;
+  name: string;
+  /** Amount needed per fortnight. */
+  amount: number;
+}
+
+export interface Payslip {
+  id: string;
+  jobId: string;
+  periodStart: string;
+  periodEnd: string;
+  /** Gross amount the employer paid for this job over the period. */
+  amountPaid: number;
 }
 
 /**

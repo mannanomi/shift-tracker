@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Briefcase, Check, Clock } from 'lucide-react';
+import { addDays } from 'date-fns';
+import { Briefcase, Check, Clock, Repeat } from 'lucide-react';
 import type { Shift } from '../../types';
 import { useActiveJobs, useShifts } from '../../hooks/useData';
 import { shiftsRepo } from '../../db/repository';
 import { Button } from '../ui/Button';
 import { Field, Input, Select } from '../ui/Field';
 import { EmptyState } from '../ui/EmptyState';
-import { formatDateOnly } from '../../lib/dateUtils';
+import { formatDateOnly, parseDateOnly } from '../../lib/dateUtils';
+import { haptic, toast } from '../ui/Toast';
 
 const MAX_TIME_PRESETS = 4;
 
@@ -48,19 +50,28 @@ function recentTimePresets(shifts: Shift[], jobId: string): { startTime: string;
   return presets;
 }
 
+type RepeatMode = 'none' | 'weekly' | 'fortnightly';
+
 export function ShiftForm({
   shift,
   initialDate,
+  template,
   onDone,
 }: {
   shift?: Shift;
   /** Pre-fills the date field for a new shift (ignored when editing an existing one). */
   initialDate?: string;
+  /** Pre-fills a new shift from another one (job, times, break, notes) — used by "Copy". */
+  template?: Partial<Omit<Shift, 'id'>>;
   onDone: () => void;
 }) {
   const jobs = useActiveJobs();
   const allShifts = useShifts();
-  const [form, setForm] = useState<Shift>(shift ?? emptyShift('', initialDate ?? formatDateOnly(new Date())));
+  const [form, setForm] = useState<Shift>(
+    () => shift ?? { ...emptyShift('', initialDate ?? formatDateOnly(new Date())), ...template },
+  );
+  const [repeat, setRepeat] = useState<RepeatMode>('none');
+  const [repeatCount, setRepeatCount] = useState(4);
 
   if (form.jobId === '' && jobs && jobs.length > 0 && !shift) {
     setForm((prev) => ({ ...prev, jobId: jobs[0].id }));
@@ -82,6 +93,20 @@ export function ShiftForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     await shiftsRepo.put(form);
+    let extra = 0;
+    if (!shift && repeat !== 'none') {
+      const step = repeat === 'weekly' ? 7 : 14;
+      for (let i = 1; i <= repeatCount; i++) {
+        await shiftsRepo.put({
+          ...form,
+          id: crypto.randomUUID(),
+          date: formatDateOnly(addDays(parseDateOnly(form.date), step * i)),
+        });
+        extra++;
+      }
+    }
+    haptic();
+    toast(extra > 0 ? `Saved ${extra + 1} shifts` : shift ? 'Shift updated' : 'Shift added');
     onDone();
   }
 
@@ -181,6 +206,35 @@ export function ShiftForm({
           <option value="no">Force: is NOT a public holiday</option>
         </Select>
       </Field>
+
+      {!shift && (
+        <div>
+          <span className="mb-1 flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+            <Repeat className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" /> Repeat
+          </span>
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <Select value={repeat} onChange={(e) => setRepeat(e.target.value as RepeatMode)}>
+              <option value="none">Don't repeat</option>
+              <option value="weekly">Every week</option>
+              <option value="fortnightly">Every fortnight</option>
+            </Select>
+            {repeat !== 'none' && (
+              <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                <Input
+                  type="number"
+                  min="1"
+                  max="26"
+                  className="w-20"
+                  value={repeatCount}
+                  onChange={(e) => setRepeatCount(Math.max(1, Math.min(26, Number(e.target.value) || 1)))}
+                  aria-label="Number of repeats"
+                />
+                more
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <Field label="Notes (optional)">
         <Input value={form.notes} onChange={(e) => update('notes', e.target.value)} placeholder="Optional notes" />
