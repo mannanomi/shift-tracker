@@ -1,4 +1,4 @@
-# Shift Tracker
+# Shiftly
 
 A web app for tracking work shifts across multiple jobs and calculating Australian casual earnings — pay rules, loadings, overtime, and a take-home estimate after tax. Built for the Australia/Adelaide timezone.
 

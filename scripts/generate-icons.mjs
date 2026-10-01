@@ -18,7 +18,7 @@ const targets = [
 for (const { file, size } of targets) {
   await sharp(svgBuffer, { density: 384 })
     .resize(size, size)
-    .flatten({ background: '#4f46e5' })
+    .flatten({ background: '#2563EB' })
     .png()
     .toFile(path.join(publicDir, file));
   console.log(`wrote ${file} (${size}x${size})`);

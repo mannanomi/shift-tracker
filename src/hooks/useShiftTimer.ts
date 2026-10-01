@@ -7,6 +7,8 @@ export interface ActiveTimer {
   jobId: string;
   /** ISO timestamp the shift started. */
   startedAt: string;
+  /** Set when started from a planned shift: ending the timer updates that shift instead of adding one. */
+  shiftId?: string;
 }
 
 function read(): ActiveTimer | null {
@@ -44,7 +46,7 @@ export function useShiftTimer() {
 
   return {
     timer,
-    start: (jobId: string) => write({ jobId, startedAt: new Date().toISOString() }),
+    start: (jobId: string, shiftId?: string) => write({ jobId, startedAt: new Date().toISOString(), shiftId }),
     stop: () => write(null),
   };
 }

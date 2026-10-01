@@ -13,10 +13,10 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'Shift Tracker',
-        short_name: 'Shifts',
+        name: 'Shiftly',
+        short_name: 'Shiftly',
         description: 'Track work shifts across multiple jobs and calculate earnings.',
-        theme_color: '#4f46e5',
+        theme_color: '#2563EB',
         background_color: '#f8fafc',
         display: 'standalone',
         orientation: 'portrait',

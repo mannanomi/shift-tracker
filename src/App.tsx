@@ -11,7 +11,6 @@ import {
   Home,
   MoreHorizontal,
   Settings as SettingsIcon,
-  Timer,
 } from 'lucide-react';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { ensureSeeded } from './db/repository';
@@ -31,12 +30,15 @@ import { Toaster } from './components/ui/Toast';
 import { Modal } from './components/ui/Modal';
 import { QuickAddSheet } from './components/shifts/QuickAddSheet';
 import { ShiftForm } from './components/shifts/ShiftForm';
+import { LogoMark } from './components/ui/Logo';
 
-const NAV_ITEMS = [
+/** Phone tab bar; the centre slot is the Quick add button. */
+const NAV_LEFT = [
   { to: '/', label: 'Home', Icon: Home },
   { to: '/shifts', label: 'Shifts', Icon: Clock },
+];
+const NAV_RIGHT = [
   { to: '/reports', label: 'Reports', Icon: BarChart3 },
-  { to: '/jobs', label: 'Jobs', Icon: Briefcase },
   { to: '/more', label: 'More', Icon: MoreHorizontal },
 ];
 
@@ -54,24 +56,16 @@ function Splash({ message }: { message: string }) {
   return <AppSkeleton message={message} />;
 }
 
-/** Floating + button that opens one-tap Quick add (with a way through to the full form). */
-function QuickAddButton() {
-  const [open, setOpen] = useState(false);
+/** One-tap Quick add sheet, with a way through to the full shift form. */
+function QuickAddFlow({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [fullFormDate, setFullFormDate] = useState<string | null>(null);
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        aria-label="Quick add shift"
-        className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition-transform hover:bg-brand-700 active:scale-95 print:hidden bottom-[calc(env(safe-area-inset-bottom)+5rem)] lg:bottom-8 lg:right-8"
-      >
-        <Plus className="h-6 w-6" strokeWidth={2.4} />
-      </button>
       {open && (
         <QuickAddSheet
-          onClose={() => setOpen(false)}
+          onClose={onClose}
           onMoreOptions={(date) => {
-            setOpen(false);
+            onClose();
             setFullFormDate(date);
           }}
         />
@@ -82,6 +76,23 @@ function QuickAddButton() {
         </Modal>
       )}
     </>
+  );
+}
+
+function TabLink({ to, label, Icon }: { to: string; label: string; Icon: typeof Home }) {
+  return (
+    <NavLink
+      to={to}
+      end={to === '/'}
+      className={({ isActive }) =>
+        `flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] font-semibold transition-colors ${
+          isActive ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
+        }`
+      }
+    >
+      <Icon className="h-5 w-5" strokeWidth={2.2} />
+      {label}
+    </NavLink>
   );
 }
 
@@ -102,6 +113,7 @@ function App() {
   const userId = session?.user.id ?? null;
   const [data, setData] = useState<DataState>({ userId: null, status: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   useEffect(() => {
     if (!cloudEnabled || !userId) return;
@@ -124,9 +136,9 @@ function App() {
   }, [userId, attempt]);
 
   if (!cloudEnabled) {
-    if (!localReady) return <Splash message="Loading Shift Tracker…" />;
+    if (!localReady) return <Splash message="Loading Shiftly…" />;
   } else {
-    if (loading) return <Splash message="Loading Shift Tracker…" />;
+    if (loading) return <Splash message="Loading Shiftly…" />;
     if (!session) return <LoginScreen />;
     if (data.userId !== userId || data.status === 'loading') return <Splash message="Syncing your data…" />;
     if (data.status === 'error') {
@@ -146,10 +158,8 @@ function App() {
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col print:hidden border-r border-slate-200 bg-white px-4 py-6 lg:flex dark:border-slate-800 dark:bg-slate-900">
         <div className="mb-8 flex items-center gap-2.5 px-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white">
-            <Timer className="h-5 w-5" />
-          </span>
-          <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">Shift Tracker</span>
+          <LogoMark />
+          <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Shiftly</span>
         </div>
         <nav className="flex flex-1 flex-col gap-1">
           {SIDEBAR_ITEMS.map(({ to, label, Icon }) => (
@@ -194,28 +204,33 @@ function App() {
         <nav className="fixed bottom-0 left-1/2 z-30 w-full max-w-2xl -translate-x-1/2 border-t lg:hidden print:hidden border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-slate-800 dark:bg-slate-900/95 dark:supports-[backdrop-filter]:bg-slate-900/80"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
-          <div className="flex justify-around px-1 py-1.5">
-            {NAV_ITEMS.map(({ to, label, Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === '/'}
-                className={({ isActive }) =>
-                  `flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px] font-medium transition-colors ${
-                    isActive
-                      ? 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400'
-                      : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
-                  }`
-                }
+          <div className="flex items-end px-2 pt-1">
+            {NAV_LEFT.map((item) => (
+              <TabLink key={item.to} {...item} />
+            ))}
+            <div className="flex flex-1 justify-center">
+              <button
+                onClick={() => setQuickAddOpen(true)}
+                aria-label="Quick add shift"
+                className="-mt-6 mb-1 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition-transform active:scale-95"
               >
-                <Icon className="h-5 w-5" strokeWidth={2.2} />
-                {label}
-              </NavLink>
+                <Plus className="h-6 w-6" strokeWidth={2.4} />
+              </button>
+            </div>
+            {NAV_RIGHT.map((item) => (
+              <TabLink key={item.to} {...item} />
             ))}
           </div>
         </nav>
       </div>
-      <QuickAddButton />
+      <button
+        onClick={() => setQuickAddOpen(true)}
+        aria-label="Quick add shift"
+        className="fixed bottom-8 right-8 z-40 hidden h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition-transform hover:bg-brand-700 active:scale-95 lg:flex print:hidden"
+      >
+        <Plus className="h-6 w-6" strokeWidth={2.4} />
+      </button>
+      <QuickAddFlow open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
       <Toaster />
       </div>
     </HashRouter>
@@ -226,10 +241,8 @@ function LoginScreen() {
   return (
     <div className="min-h-screen bg-slate-50 px-4 pt-16 dark:bg-slate-900">
       <div className="mx-auto mb-6 flex max-w-md items-center justify-center gap-2.5">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white">
-          <Timer className="h-5 w-5" />
-        </span>
-        <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Shift Tracker</span>
+        <LogoMark className="h-11 w-11" />
+        <span className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Shiftly</span>
       </div>
       <AccountPage />
     </div>
@@ -241,6 +254,7 @@ function MorePage() {
     <div className="space-y-4">
       <PageHeader icon={<MoreHorizontal className="h-5 w-5" />} title="More" />
       <div className="space-y-2.5">
+        <MoreLink to="/jobs" label="Jobs" subtitle="Pay rates, loadings and job colours" icon={Briefcase} />
         <MoreLink to="/holidays" label="Public holidays" subtitle="Manage SA public holiday dates" icon={CalendarDays} />
         <MoreLink to="/account" label="Account" subtitle="Sign in to sync across devices" icon={Cloud} />
         <MoreLink to="/settings" label="Settings" subtitle="Week start day, fortnight cycle" icon={SettingsIcon} />
