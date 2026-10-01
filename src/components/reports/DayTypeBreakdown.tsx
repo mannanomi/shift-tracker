@@ -35,11 +35,13 @@ export function DayTypeBreakdown({ report }: { report: RangeReport }) {
         <p className="py-4 text-center text-sm text-slate-400 dark:text-slate-500">No shifts in this period.</p>
       ) : (
         <>
-          <div className="flex h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
-            {DAY_TYPES.map(({ type, color }) => {
-              const pay = totals.get(type)?.pay ?? 0;
-              return pay > 0 ? <div key={type} className={color} style={{ width: `${(pay / totalPay) * 100}%` }} /> : null;
-            })}
+          <div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+            <div className="animate-grow-x flex h-full origin-left [animation-delay:150ms]">
+              {DAY_TYPES.map(({ type, color }) => {
+                const pay = totals.get(type)?.pay ?? 0;
+                return pay > 0 ? <div key={type} className={color} style={{ width: `${(pay / totalPay) * 100}%` }} /> : null;
+              })}
+            </div>
           </div>
           <div className="mt-3 space-y-1.5">
             {DAY_TYPES.filter(({ type }) => totals.has(type)).map(({ type, label, color }) => {

@@ -19,6 +19,7 @@ export function ShiftLineCard({
   onEdit,
   onDelete,
   onCopy,
+  index = 0,
 }: {
   shift: Shift;
   job: Job;
@@ -28,6 +29,8 @@ export function ShiftLineCard({
   onEdit: () => void;
   onDelete: () => void;
   onCopy: () => void;
+  /** Position in a list, used to cascade the entrance animation. */
+  index?: number;
 }) {
   const swipe = useSwipe({ onSwipeLeft: onDelete, onSwipeRight: onCopy });
 
@@ -58,7 +61,7 @@ export function ShiftLineCard({
           transition: swipe.dragging ? 'none' : 'transform 0.2s ease-out',
         }}
       >
-    <Card className="border-l-4" style={{ borderLeftColor: job.color }}>
+    <Card interactive className="border-l-4" style={{ borderLeftColor: job.color, animationDelay: `${Math.min(index, 12) * 35}ms` }}>
       <button
         className="flex w-full items-center justify-between gap-3 text-left"
         onClick={() => {

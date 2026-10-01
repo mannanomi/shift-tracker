@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 /** A bottom sheet on phones, a centred dialog on larger screens. */
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-[2px] sm:items-center sm:p-4 dark:bg-black/60" onClick={onClose}>
+    <div className="animate-fade-in fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-[2px] sm:items-center sm:p-4 dark:bg-black/60" onClick={onClose}>
       <div
         className="animate-sheet-up max-h-[85vh] w-full overflow-y-auto rounded-t-3xl bg-white pb-[env(safe-area-inset-bottom)] shadow-xl sm:max-w-lg sm:rounded-3xl dark:bg-slate-800"
         onClick={(e) => e.stopPropagation()}

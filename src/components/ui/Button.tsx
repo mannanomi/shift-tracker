@@ -19,7 +19,7 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; icon?: ReactNode }) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${variantClasses[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition duration-150 active:scale-[0.96] disabled:cursor-not-allowed disabled:active:scale-100 disabled:opacity-60 ${variantClasses[variant]} ${className}`}
       {...props}
     >
       {icon}

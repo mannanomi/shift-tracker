@@ -48,8 +48,8 @@ export function JobsPage() {
             />
           </Card>
         )}
-        {jobs?.map((job) => (
-          <Card key={job.id} className={`flex flex-col ${job.archived ? 'opacity-60' : ''}`}>
+        {jobs?.map((job, index) => (
+          <Card key={job.id} className={`flex flex-col ${job.archived ? 'opacity-60' : ''}`} style={{ animationDelay: `${index * 70}ms` }}>
             <div className="flex items-start justify-between gap-2">
               <Badge color={job.color}>{job.name}</Badge>
               <div className="flex shrink-0 items-center gap-1.5">

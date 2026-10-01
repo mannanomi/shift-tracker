@@ -1,5 +1,9 @@
 function Bone({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse rounded-lg bg-slate-200/80 dark:bg-slate-700/60 ${className}`} />;
+  return (
+    <div
+      className={`animate-shimmer rounded-lg bg-[linear-gradient(90deg,var(--color-slate-200)_25%,var(--color-slate-100)_50%,var(--color-slate-200)_75%)] bg-size-[200%_100%] dark:bg-[linear-gradient(90deg,var(--color-slate-800)_25%,var(--color-slate-700)_50%,var(--color-slate-800)_75%)] ${className}`}
+    />
+  );
 }
 
 /** Placeholder layout shown while data loads or syncs, shaped like the Dashboard. */

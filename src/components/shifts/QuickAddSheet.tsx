@@ -99,11 +99,12 @@ export function QuickAddSheet({ onClose, onMoreOptions }: { onClose: () => void;
         />
       ) : (
         <div className="space-y-2">
-          {templates.map((t) => (
+          {templates.map((t, index) => (
             <button
               key={`${t.job.id}|${t.startTime}|${t.endTime}|${t.unpaidBreakMinutes}`}
               onClick={() => add(t)}
-              className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 p-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 active:scale-[0.99] dark:border-slate-700 dark:hover:border-slate-600 dark:hover:bg-slate-700/40"
+              style={{ animationDelay: `${80 + index * 50}ms` }}
+              className="animate-pop-in flex w-full items-center gap-3 rounded-2xl border border-slate-200 p-3 text-left transition duration-150 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98] dark:border-slate-700 dark:hover:border-slate-600 dark:hover:bg-slate-700/40"
             >
               <span className="h-9 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: t.job.color }} />
               <span className="min-w-0 flex-1">

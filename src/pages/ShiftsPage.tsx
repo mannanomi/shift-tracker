@@ -141,9 +141,10 @@ export function ShiftsPage() {
               <EmptyState icon={<Inbox className="h-5 w-5" />} title="No shifts logged yet" subtitle="Tap Add shift to log your first one" />
             </Card>
           )}
-          {listLines.map(({ shift, job, breakdown }) => (
+          {listLines.map(({ shift, job, breakdown }, index) => (
             <ShiftLineCard
               key={shift.id}
+              index={index}
               shift={shift}
               job={job}
               breakdown={breakdown}
@@ -169,9 +170,10 @@ export function ShiftsPage() {
         >
           <div className="space-y-2">
             {selectedDateLines.length === 0 && <EmptyState icon={<Inbox className="h-5 w-5" />} title="No shifts on this day" />}
-            {selectedDateLines.map(({ shift, job, breakdown }) => (
+            {selectedDateLines.map(({ shift, job, breakdown }, index) => (
               <ShiftLineCard
                 key={shift.id}
+                index={index}
                 shift={shift}
                 job={job}
                 breakdown={breakdown}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { HashRouter, NavLink, Route, Routes } from 'react-router-dom';
+import { HashRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import {
   BarChart3,
   Briefcase,
@@ -85,15 +85,34 @@ function TabLink({ to, label, Icon }: { to: string; label: string; Icon: typeof 
       to={to}
       end={to === '/'}
       className={({ isActive }) =>
-        `flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] font-semibold transition-colors ${
+        `flex flex-1 flex-col items-center gap-0.5 py-1 text-[11px] font-semibold transition-colors ${
           isActive ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
         }`
       }
     >
-      <Icon className="h-5 w-5" strokeWidth={2.2} />
-      {label}
+      {({ isActive }) => (
+        <>
+          <span
+            className={`flex h-7 w-12 items-center justify-center rounded-full transition-colors duration-300 ${
+              isActive ? 'animate-tab-pop bg-brand-50 dark:bg-brand-500/15' : 'bg-transparent'
+            }`}
+          >
+            <Icon className="h-5 w-5" strokeWidth={2.2} />
+          </span>
+          {label}
+        </>
+      )}
     </NavLink>
   );
+}
+
+/** Scrolls to the top whenever the page changes, so each page opens at its beginning. */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [pathname]);
+  return null;
 }
 
 type DataState = { userId: string | null; status: 'loading' | 'ready' | 'error'; error?: string };
@@ -155,6 +174,7 @@ function App() {
 
   return (
     <HashRouter>
+      <ScrollToTop />
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col print:hidden border-r border-slate-200 bg-white px-4 py-6 lg:flex dark:border-slate-800 dark:bg-slate-900">
         <div className="mb-8 flex items-center gap-2.5 px-2">
@@ -168,15 +188,24 @@ function App() {
               to={to}
               end={to === '/'}
               className={({ isActive }) =>
-                `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400'
                     : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
                 }`
               }
             >
-              <Icon className="h-5 w-5" strokeWidth={2.1} />
-              {label}
+              {({ isActive }) => (
+                <>
+                  <span
+                    className={`absolute inset-y-2 left-0 w-1 rounded-full bg-brand-600 transition-transform duration-300 dark:bg-brand-400 ${
+                      isActive ? 'scale-y-100' : 'scale-y-0'
+                    }`}
+                  />
+                  <Icon className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" strokeWidth={2.1} />
+                  {label}
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -186,7 +215,7 @@ function App() {
       </aside>
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col lg:ml-64 lg:max-w-none print:ml-0">
         <main
-          className="mx-auto w-full flex-1 px-4 pb-24 pt-6 lg:max-w-6xl lg:px-10 lg:pb-12 lg:pt-10"
+          className="stagger mx-auto w-full flex-1 px-4 pb-24 pt-6 lg:max-w-6xl lg:px-10 lg:pb-12 lg:pt-10"
           style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)' }}
         >
           <Routes>
@@ -212,9 +241,9 @@ function App() {
               <button
                 onClick={() => setQuickAddOpen(true)}
                 aria-label="Quick add shift"
-                className="-mt-6 mb-1 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition-transform active:scale-95"
+                className="group -mt-6 mb-1 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition duration-200 active:scale-90"
               >
-                <Plus className="h-6 w-6" strokeWidth={2.4} />
+                <Plus className="h-6 w-6 transition-transform duration-300 group-hover:rotate-90" strokeWidth={2.4} />
               </button>
             </div>
             {NAV_RIGHT.map((item) => (
@@ -226,9 +255,9 @@ function App() {
       <button
         onClick={() => setQuickAddOpen(true)}
         aria-label="Quick add shift"
-        className="fixed bottom-8 right-8 z-40 hidden h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition-transform hover:bg-brand-700 active:scale-95 lg:flex print:hidden"
+        className="group fixed bottom-8 right-8 z-40 hidden h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition duration-200 hover:-translate-y-0.5 hover:bg-brand-700 hover:shadow-xl hover:shadow-brand-600/40 active:scale-90 lg:flex print:hidden"
       >
-        <Plus className="h-6 w-6" strokeWidth={2.4} />
+        <Plus className="h-6 w-6 transition-transform duration-300 group-hover:rotate-90" strokeWidth={2.4} />
       </button>
       <QuickAddFlow open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
       <Toaster />
@@ -279,7 +308,7 @@ function MoreLink({
   return (
     <NavLink
       to={to}
-      className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-200/50 transition-colors hover:border-brand-200 hover:bg-brand-50/40 dark:border-slate-800 dark:bg-slate-800 dark:shadow-none dark:hover:border-brand-800 dark:hover:bg-slate-800/70"
+      className="group flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-200/50 transition duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:bg-brand-50/40 hover:shadow-md active:scale-[0.99] dark:border-slate-800 dark:bg-slate-800 dark:shadow-none dark:hover:border-brand-800 dark:hover:bg-slate-800/70"
     >
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
         <Icon className="h-5 w-5" />
@@ -288,7 +317,7 @@ function MoreLink({
         <p className="font-medium text-slate-800 dark:text-slate-100">{label}</p>
         <p className="text-xs text-slate-400 dark:text-slate-500">{subtitle}</p>
       </div>
-      <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 dark:text-slate-600" />
+      <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-transform duration-200 group-hover:translate-x-1 dark:text-slate-600" />
     </NavLink>
   );
 }

@@ -8,7 +8,7 @@ function prefersReducedMotion() {
 }
 
 /** Eases a number from its previous value (0 on first render) to the new one. */
-function useCountUp(target: number, enabled: boolean) {
+export function useCountUp(target: number, enabled: boolean) {
   const [value, setValue] = useState(enabled && !prefersReducedMotion() ? 0 : target);
   const fromRef = useRef(value);
 
@@ -50,4 +50,10 @@ export function Money({ amount, className = '', animate = false }: { amount: num
       <span className="text-[0.6em] font-semibold opacity-70">{cents}</span>
     </span>
   );
+}
+
+/** Any number that counts up like Money, formatted by the caller (hours, percentages…). */
+export function CountUp({ value, format, className = '' }: { value: number; format: (n: number) => string; className?: string }) {
+  const shown = useCountUp(value, true);
+  return <span className={`tabular-nums ${className}`}>{format(shown)}</span>;
 }

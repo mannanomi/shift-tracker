@@ -19,7 +19,7 @@ import { estimateNetForPeriod } from '../lib/tax/auIncomeTax';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
-import { Money } from '../components/ui/Money';
+import { CountUp, Money } from '../components/ui/Money';
 import { LogoMark } from '../components/ui/Logo';
 import { SyncChip } from '../components/ui/SyncChip';
 import { ShiftForm } from '../components/shifts/ShiftForm';
@@ -148,7 +148,15 @@ function PayCycleHero({ report, today, helpDebt }: { report: RangeReport; today:
   const daysLeft = days.length - dayNumber;
 
   return (
-    <div className="animate-fade-up rounded-3xl bg-brand-600 p-5 text-white lg:p-6">
+    <div className="animate-fade-up relative isolate overflow-hidden rounded-3xl bg-brand-600 p-5 text-white lg:p-6">
+      <span
+        aria-hidden
+        className="animate-glow-a pointer-events-none absolute -right-20 -top-24 -z-10 h-72 w-72 rounded-full bg-sky-300/35 blur-3xl"
+      />
+      <span
+        aria-hidden
+        className="animate-glow-b pointer-events-none absolute -bottom-28 -left-16 -z-10 h-64 w-64 rounded-full bg-indigo-400/40 blur-3xl"
+      />
       <div className="flex items-center justify-between gap-3 text-xs font-semibold text-brand-100">
         <span>
           Pay cycle · {fmtShort(report.startDate)} – {fmtShort(report.endDate)}
@@ -174,26 +182,38 @@ function PayCycleHero({ report, today, helpDebt }: { report: RangeReport; today:
 
       <div className="mt-4 flex gap-1" aria-hidden>
         {days.map((d, i) => (
-          <span key={d} className={`h-1.5 flex-1 rounded-full ${i < dayNumber ? 'bg-white' : 'bg-white/25'}`} />
+          <span
+            key={d}
+            className={`relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/25 ${i === dayNumber - 1 ? 'animate-soft-pulse' : ''}`}
+          >
+            {i < dayNumber && (
+              <span
+                className="animate-grow-x absolute inset-0 origin-left rounded-full bg-white"
+                style={{ animationDelay: `${250 + i * 70}ms` }}
+              />
+            )}
+          </span>
         ))}
       </div>
       <p className="mt-1.5 text-xs text-brand-100">{daysLeft === 0 ? 'Last day of this cycle' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`}</p>
 
       <div className="mt-4 grid grid-cols-3 gap-3 border-t border-white/15 pt-3">
-        <HeroStat label="After tax ≈" value={formatCurrency(afterTax)} />
-        <HeroStat label="Cash" value={formatCurrency(report.nonTaxableGrossPay)} />
-        <HeroStat label="Hours" value={formatHours(report.totalHours)} />
+        <HeroStat label="After tax ≈" value={afterTax} format={formatCurrency} />
+        <HeroStat label="Cash" value={report.nonTaxableGrossPay} format={formatCurrency} />
+        <HeroStat label="Hours" value={report.totalHours} format={formatHours} />
       </div>
       <p className="mt-1.5 text-[11px] text-brand-100/80">Whole fortnight, including scheduled shifts</p>
     </div>
   );
 }
 
-function HeroStat({ label, value }: { label: string; value: string }) {
+function HeroStat({ label, value, format }: { label: string; value: number; format: (n: number) => string }) {
   return (
     <div className="min-w-0">
       <p className="text-[11px] font-medium text-brand-100">{label}</p>
-      <p className="truncate font-semibold tabular-nums">{value}</p>
+      <p className="truncate font-semibold">
+        <CountUp value={value} format={format} />
+      </p>
     </div>
   );
 }
@@ -227,10 +247,16 @@ function KpiStrip({ week, prevWeek }: { week: RangeReport; prevWeek: RangeReport
           )
         }
       />
-      <Kpi label="Hours" value={formatHours(week.totalHours)} hint={`${shiftCount} shift${shiftCount === 1 ? '' : 's'}`} />
+      <Kpi label="Hours" value={<CountUp value={week.totalHours} format={formatHours} />} hint={`${shiftCount} shift${shiftCount === 1 ? '' : 's'}`} />
       <Kpi
         label="Avg rate"
-        value={week.totalHours > 0 ? `${formatCurrency(week.totalGrossPay / week.totalHours).replace(/\.\d+$/, '')}/h` : '—'}
+        value={
+          week.totalHours > 0 ? (
+            <CountUp value={week.totalGrossPay / week.totalHours} format={(n) => `${formatCurrency(n).replace(/\.\d+$/, '')}/h`} />
+          ) : (
+            '—'
+          )
+        }
         hint="all jobs"
       />
     </div>
@@ -263,7 +289,7 @@ function GoalsCard({ goals, report, helpDebt }: { goals: Goal[]; report: RangeRe
         </span>
       </div>
       <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 text-sm">
-        {goals.map((goal) => {
+        {goals.map((goal, index) => {
           const covered = Math.max(0, Math.min(goal.amount, remaining));
           remaining -= covered;
           const pct = goal.amount > 0 ? (covered / goal.amount) * 100 : 100;
@@ -272,8 +298,8 @@ function GoalsCard({ goals, report, helpDebt }: { goals: Goal[]; report: RangeRe
               <span className="font-medium text-slate-700 dark:text-slate-200">{goal.name}</span>
               <span className="h-2 overflow-hidden rounded-full bg-brand-50 dark:bg-slate-700">
                 <span
-                  className={`block h-full rounded-full transition-[width] duration-700 ${pct >= 100 ? 'bg-brand-600 dark:bg-brand-400' : 'bg-brand-400 dark:bg-brand-500'}`}
-                  style={{ width: `${pct}%` }}
+                  className={`animate-grow-x block h-full origin-left rounded-full transition-[width] duration-700 ${pct >= 100 ? 'bg-brand-600 dark:bg-brand-400' : 'bg-brand-400 dark:bg-brand-500'}`}
+                  style={{ width: `${pct}%`, animationDelay: `${200 + index * 120}ms` }}
                 />
               </span>
               <span className="w-10 text-right text-xs tabular-nums text-slate-500 dark:text-slate-400">{Math.round(pct)}%</span>

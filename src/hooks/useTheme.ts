@@ -37,6 +37,8 @@ export function useTheme(): [ThemeMode, (mode: ThemeMode) => void] {
 
   function setMode(next: ThemeMode) {
     localStorage.setItem(STORAGE_KEY, next);
+    // Apply right away (not only in the effect) so a view transition captures the new theme.
+    applyTheme(next);
     setModeState(next);
   }
 

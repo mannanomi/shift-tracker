@@ -12,7 +12,7 @@ import {
   startOfWeekStr,
 } from '../lib/dateUtils';
 import { formatCurrency, formatHours } from '../lib/format';
-import { Money } from '../components/ui/Money';
+import { CountUp, Money } from '../components/ui/Money';
 import { downloadCsv, shiftsToCsv } from '../lib/csvExport';
 import { estimateNetForPeriod } from '../lib/tax/auIncomeTax';
 import { Card } from '../components/ui/Card';
@@ -119,17 +119,18 @@ export function ReportsPage() {
   const cashHours = cashJobs.reduce((sum, j) => sum + j.hours, 0);
   const shiftCount = report.shiftLines.length;
 
+  const perHour = (n: number) => `${formatCurrency(n)}/h`;
   const stats = [
-    { label: 'Total earned', value: formatCurrency(report.totalGrossPay), hint: 'Taxable + cash' },
-    { label: 'Hours', value: formatHours(report.totalHours), hint: `${shiftCount} shift${shiftCount === 1 ? '' : 's'}` },
+    { label: 'Total earned', value: <CountUp value={report.totalGrossPay} format={formatCurrency} />, hint: 'Taxable + cash' },
+    { label: 'Hours', value: <CountUp value={report.totalHours} format={formatHours} />, hint: `${shiftCount} shift${shiftCount === 1 ? '' : 's'}` },
     {
       label: 'Average rate',
-      value: report.totalHours > 0 ? `${formatCurrency(report.totalGrossPay / report.totalHours)}/h` : '—',
+      value: report.totalHours > 0 ? <CountUp value={report.totalGrossPay / report.totalHours} format={perHour} /> : '—',
       hint: 'Across all loadings',
     },
     {
       label: 'Per shift',
-      value: shiftCount > 0 ? formatCurrency(report.totalGrossPay / shiftCount) : '—',
+      value: shiftCount > 0 ? <CountUp value={report.totalGrossPay / shiftCount} format={formatCurrency} /> : '—',
       hint: 'Average',
     },
   ];

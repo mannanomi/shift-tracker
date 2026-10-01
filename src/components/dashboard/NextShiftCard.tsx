@@ -64,6 +64,15 @@ export function NextShiftCard({ next, publicHolidays }: { next: ShiftLine | null
   const job = timer ? allJobs?.find((j) => j.id === timer.jobId) : undefined;
   const startedAt = timer ? new Date(timer.startedAt) : null;
   const elapsed = startedAt ? now.getTime() - startedAt.getTime() : 0;
+  // When started from a planned shift, show progress against its planned length.
+  const plannedShift = timer?.shiftId ? allShifts?.find((sh) => sh.id === timer.shiftId) : undefined;
+  const plannedMs = plannedShift
+    ? (() => {
+        const { start: ps, end: pe } = resolveShiftTimes(plannedShift.date, plannedShift.startTime, plannedShift.endTime);
+        return pe.getTime() - ps.getTime();
+      })()
+    : 0;
+  const plannedPct = plannedMs > 0 ? Math.min(100, (elapsed / plannedMs) * 100) : 0;
 
   const liveEarnings = useMemo(() => {
     if (!job || !startedAt || elapsed < 60_000) return 0;
@@ -129,10 +138,26 @@ export function NextShiftCard({ next, publicHolidays }: { next: ShiftLine | null
           <div className="mt-1.5 flex items-end justify-between gap-3">
             <p className="font-mono text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">{formatElapsed(elapsed)}</p>
             <p className="text-xl font-bold text-brand-600 dark:text-brand-400">
-              <Money amount={liveEarnings} />
+              <Money amount={liveEarnings} animate />
             </p>
           </div>
           <p className="text-xs text-slate-400 dark:text-slate-500">Started {format(startedAt, 'h:mm a')} · earned so far (no break)</p>
+          {plannedShift && plannedMs > 0 && (
+            <div className="mt-3">
+              <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+                <div
+                  className="relative h-full overflow-hidden rounded-full bg-brand-600 transition-[width] duration-1000 ease-linear dark:bg-brand-400"
+                  style={{ width: `${plannedPct}%` }}
+                >
+                  <span className="animate-shimmer absolute inset-0 bg-[linear-gradient(90deg,transparent_25%,rgba(255,255,255,0.45)_50%,transparent_75%)] bg-size-[200%_100%]" />
+                </div>
+              </div>
+              <p className="mt-1 flex justify-between text-xs tabular-nums text-slate-400 dark:text-slate-500">
+                <span>{Math.floor(plannedPct)}% of planned {formatHours(plannedMs / 3_600_000)}</span>
+                <span>Planned end {timeLabel(plannedShift.endTime)}</span>
+              </p>
+            </div>
+          )}
           <div className="mt-3 flex gap-2">
             <Button icon={<Square className="h-3.5 w-3.5" />} onClick={endShift}>
               End and save

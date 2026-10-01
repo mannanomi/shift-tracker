@@ -68,10 +68,11 @@ export function EarningsHeatmap({ lines, today, weekStartDay }: { lines: ShiftLi
               {week.map((day) => (
                 <div
                   key={day.date}
+                  style={{ animationDelay: `${wi * 12}ms` }}
                   title={`${parseDateOnly(day.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}${
                     day.amount > 0 ? ` · ${formatCurrency(day.amount)}` : ''
                   }`}
-                  className={`h-3 w-3 rounded-[3px] ${day.future ? 'opacity-0' : LEVEL_CLASSES[level(day.amount)]}`}
+                  className={`animate-pop-in h-3 w-3 rounded-[3px] ${day.future ? 'opacity-0' : LEVEL_CLASSES[level(day.amount)]}`}
                 />
               ))}
             </div>
