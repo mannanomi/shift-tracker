@@ -27,7 +27,7 @@ export function JobsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:space-y-6">
       <PageHeader
         icon={<Briefcase className="h-5 w-5" />}
         title="Jobs"
@@ -38,7 +38,7 @@ export function JobsPage() {
         }
       />
 
-      <div className="space-y-3 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
+      <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0 lg:*:h-full">
         {jobs?.length === 0 && (
           <Card>
             <EmptyState

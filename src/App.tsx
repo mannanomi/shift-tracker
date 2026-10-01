@@ -244,14 +244,16 @@ function LoginScreen() {
         <LogoMark className="h-11 w-11" />
         <span className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Shiftly</span>
       </div>
-      <AccountPage />
+      <div className="mx-auto max-w-md">
+        <AccountPage />
+      </div>
     </div>
   );
 }
 
 function MorePage() {
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4 lg:space-y-6">
       <PageHeader icon={<MoreHorizontal className="h-5 w-5" />} title="More" />
       <div className="space-y-2.5">
         <MoreLink to="/jobs" label="Jobs" subtitle="Pay rates, loadings and job colours" icon={Briefcase} />

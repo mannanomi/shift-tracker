@@ -90,23 +90,21 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-flow-row-dense gap-4 lg:grid-cols-3 lg:items-start">
-        <div className="lg:col-span-2">
-          <PayCycleHero report={reports.fortnight} today={today} helpDebt={helpDebt} />
+      <PayCycleHero report={reports.fortnight} today={today} helpDebt={helpDebt} />
+      <KpiStrip week={reports.week} prevWeek={reports.prevWeek} />
+
+      <div className="grid gap-4 lg:grid-cols-2 lg:gap-6 lg:*:h-full">
+        <div className={`lg:*:h-full ${goals.length > 0 ? '' : 'lg:col-span-2'}`}>
+          <NextShiftCard next={nextShift} publicHolidays={publicHolidays ?? []} />
         </div>
-        <div className="lg:col-span-2">
-          <KpiStrip week={reports.week} prevWeek={reports.prevWeek} />
-        </div>
-        <NextShiftCard next={nextShift} publicHolidays={publicHolidays ?? []} />
         {goals.length > 0 && <GoalsCard goals={goals} report={reports.fortnight} helpDebt={helpDebt} />}
-        {hasCashJob && (
-          <div className="lg:col-start-3">
-            <CashStrip week={reports.week} fortnight={reports.fortnight} />
-          </div>
-        )}
-        <div className="lg:col-span-2">
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2 lg:gap-6 lg:*:h-full">
+        <div className={`lg:*:h-full ${hasCashJob ? '' : 'lg:col-span-2'}`}>
           <TaxableSummary week={reports.week} fortnight={reports.fortnight} helpDebt={helpDebt} />
         </div>
+        {hasCashJob && <CashCard week={reports.week} fortnight={reports.fortnight} />}
       </div>
 
       <p className="text-xs text-slate-400 dark:text-slate-500">
@@ -211,7 +209,7 @@ function KpiStrip({ week, prevWeek }: { week: RangeReport; prevWeek: RangeReport
   const t = trend(week.totalGrossPay, prevWeek.totalGrossPay);
   const shiftCount = week.shiftLines.length;
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-3 gap-3 lg:gap-6">
       <Kpi
         label="This week"
         value={<Money amount={week.totalGrossPay} animate />}
@@ -287,24 +285,77 @@ function GoalsCard({ goals, report, helpDebt }: { goals: Goal[]; report: RangeRe
   );
 }
 
-/** Cash-in-hand income, kept visually apart from taxable income. */
-function CashStrip({ week, fortnight }: { week: RangeReport; fortnight: RangeReport }) {
+/** Cash-in-hand income, laid out like Taxable income but kept visually apart (amber, untaxed). */
+function CashCard({ week, fortnight }: { week: RangeReport; fortnight: RangeReport }) {
+  const jobs = fortnight.jobSubtotals.filter((j) => !j.taxable);
+  const weekByJob = new Map(week.jobSubtotals.map((j) => [j.jobId, j.grossPay]));
   return (
-    <div className="animate-fade-up flex items-center gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-      <Banknote className="h-5 w-5 shrink-0" />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">Cash income</p>
-        <p className="text-xs text-amber-700/80 dark:text-amber-400/80">Untaxed, not in taxable totals</p>
+    <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800/50 dark:bg-amber-500/5">
+      <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+        <Banknote className="h-4 w-4" />
+        <h2 className="text-sm font-medium">Cash income</h2>
+        <span className="ml-auto text-xs">Untaxed · not in taxable totals</span>
       </div>
-      <div className="text-right text-xs">
-        <p>
-          Week <span className="text-sm font-semibold tabular-nums">{formatCurrency(week.nonTaxableGrossPay)}</span>
-        </p>
-        <p>
-          Fortnight <span className="text-sm font-semibold tabular-nums">{formatCurrency(fortnight.nonTaxableGrossPay)}</span>
-        </p>
+      <div className="mt-3 grid grid-cols-2 divide-x divide-amber-200/70 dark:divide-amber-800/40">
+        <CashColumn title="This week" amount={week.nonTaxableGrossPay} hours={week.jobSubtotals.filter((j) => !j.taxable).reduce((sum, j) => sum + j.hours, 0)} />
+        <div className="pl-4">
+          <CashColumn title="This fortnight" amount={fortnight.nonTaxableGrossPay} hours={jobs.reduce((sum, j) => sum + j.hours, 0)} />
+        </div>
       </div>
+      <JobTable jobs={jobs} weekByJob={weekByJob} tone="amber" />
+    </Card>
+  );
+}
+
+function CashColumn({ title, amount, hours }: { title: string; amount: number; hours: number }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-amber-700/70 dark:text-amber-400/70">{title}</p>
+      <p className="text-xl font-bold tracking-tight text-slate-900 lg:text-2xl dark:text-slate-100">
+        <Money amount={amount} />
+      </p>
+      <p className="mt-1 text-[11px] font-medium text-amber-700/70 dark:text-amber-400/70">Hours</p>
+      <p className="text-sm font-semibold tabular-nums text-amber-700 dark:text-amber-400">{formatHours(hours)}</p>
     </div>
+  );
+}
+
+/** Per-job week and fortnight amounts, shared by the Taxable and Cash cards. */
+function JobTable({
+  jobs,
+  weekByJob,
+  tone,
+}: {
+  jobs: RangeReport['jobSubtotals'];
+  weekByJob: Map<string, number>;
+  tone: 'slate' | 'amber';
+}) {
+  if (jobs.length === 0) return null;
+  const rule = tone === 'amber' ? 'border-amber-200/70 dark:border-amber-800/40' : 'border-slate-100 dark:border-slate-700';
+  return (
+    <table className={`mt-3 w-full border-t text-xs ${rule}`}>
+      <thead>
+        <tr className="text-slate-400 dark:text-slate-500">
+          <th className="pb-1 pt-2 text-left font-medium">By job</th>
+          <th className="pb-1 pt-2 text-right font-medium">Week</th>
+          <th className="pb-1 pt-2 text-right font-medium">Fortnight</th>
+        </tr>
+      </thead>
+      <tbody>
+        {jobs.map((j) => (
+          <tr key={j.jobId}>
+            <td className="py-1">
+              <span className="flex min-w-0 items-center gap-1.5 font-medium text-slate-700 dark:text-slate-200">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: j.color }} />
+                <span className="truncate">{j.jobName}</span>
+              </span>
+            </td>
+            <td className="py-1 text-right tabular-nums text-slate-600 dark:text-slate-300">{formatCurrency(weekByJob.get(j.jobId) ?? 0)}</td>
+            <td className="py-1 text-right tabular-nums text-slate-600 dark:text-slate-300">{formatCurrency(j.grossPay)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -324,31 +375,7 @@ function TaxableSummary({ week, fortnight, helpDebt }: { week: RangeReport; fort
           <TaxableColumn title="This fortnight" report={fortnight} periodsPerYear={26} helpDebt={helpDebt} />
         </div>
       </div>
-      {jobs.length > 0 && (
-        <table className="mt-3 w-full border-t border-slate-100 text-xs dark:border-slate-700">
-          <thead>
-            <tr className="text-slate-400 dark:text-slate-500">
-              <th className="pb-1 pt-2 text-left font-medium">By job</th>
-              <th className="pb-1 pt-2 text-right font-medium">Week</th>
-              <th className="pb-1 pt-2 text-right font-medium">Fortnight</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs.map((j) => (
-              <tr key={j.jobId}>
-                <td className="py-1">
-                  <span className="flex min-w-0 items-center gap-1.5 font-medium text-slate-700 dark:text-slate-200">
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: j.color }} />
-                    <span className="truncate">{j.jobName}</span>
-                  </span>
-                </td>
-                <td className="py-1 text-right tabular-nums text-slate-600 dark:text-slate-300">{formatCurrency(weekByJob.get(j.jobId) ?? 0)}</td>
-                <td className="py-1 text-right tabular-nums text-slate-600 dark:text-slate-300">{formatCurrency(j.grossPay)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <JobTable jobs={jobs} weekByJob={weekByJob} tone="slate" />
     </Card>
   );
 }

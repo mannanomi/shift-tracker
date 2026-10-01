@@ -78,7 +78,7 @@ export function ShiftsPage() {
   const selectedDateLines = selectedDate ? (shiftsByDate.get(selectedDate) ?? []) : [];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:space-y-6">
       <PageHeader
         icon={<Clock className="h-5 w-5" />}
         title="Shifts"
@@ -135,7 +135,7 @@ export function ShiftsPage() {
       )}
 
       {viewMode === 'list' && (
-        <div className="grid gap-2 lg:grid-cols-2 lg:items-start">
+        <div className="space-y-2">
           {listLines.length === 0 && (
             <Card>
               <EmptyState icon={<Inbox className="h-5 w-5" />} title="No shifts logged yet" subtitle="Tap Add shift to log your first one" />

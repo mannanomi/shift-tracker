@@ -29,11 +29,11 @@ export function PublicHolidaysPage() {
   const sorted = [...(holidays ?? [])].sort((a, b) => a.date.localeCompare(b.date));
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4 lg:space-y-6">
       <PageHeader icon={<CalendarDays className="h-5 w-5" />} title="Public holidays" />
 
       <Card>
-        <form onSubmit={addHoliday} className="flex flex-wrap items-end gap-3">
+        <form onSubmit={addHoliday} className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <Field label="Date">
             <Input type="date" value={newHoliday.date} onChange={(e) => setNewHoliday((p) => ({ ...p, date: e.target.value }))} />
           </Field>
@@ -49,9 +49,9 @@ export function PublicHolidaysPage() {
       <Card>
         <div className="divide-y divide-slate-100 dark:divide-slate-700">
           {sorted.map((h) => (
-            <div key={h.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-              <span className="text-slate-600 dark:text-slate-300">{parseDateOnly(h.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
-              <span className="flex-1 text-slate-800 dark:text-slate-200">{h.name}</span>
+            <div key={h.id} className="grid grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)_auto] items-center gap-3 py-2 text-sm">
+              <span className="tabular-nums text-slate-600 dark:text-slate-300">{parseDateOnly(h.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              <span className="truncate text-slate-800 dark:text-slate-200">{h.name}</span>
               <Button variant="ghost" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => removeHoliday(h.id)}>
                 Remove
               </Button>

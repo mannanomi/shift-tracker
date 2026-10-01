@@ -62,7 +62,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4 lg:space-y-6">
       <PageHeader icon={<SettingsIcon className="h-5 w-5" />} title="Settings" />
 
       <Card className="space-y-3">

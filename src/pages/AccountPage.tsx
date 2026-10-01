@@ -42,7 +42,7 @@ export function AccountPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4 lg:space-y-6">
       <PageHeader icon={<Cloud className="h-5 w-5" />} title="Account" />
 
       {!cloudEnabled && (
