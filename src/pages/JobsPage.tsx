@@ -49,45 +49,54 @@ export function JobsPage() {
           </Card>
         )}
         {jobs?.map((job) => (
-          <Card key={job.id} className={job.archived ? 'opacity-60' : ''}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge color={job.color}>{job.name}</Badge>
-                  {!job.taxable && (
-                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
-                      Cash
-                    </span>
-                  )}
-                  {job.archived && <span className="text-xs text-slate-400 dark:text-slate-500">(archived)</span>}
-                </div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  ${job.morningRate.toFixed(2)}/hr day · ${job.nightRate.toFixed(2)}/hr night ({job.nightRateStartsAt}
-                  {job.nightRateEndsAt ? `–${job.nightRateEndsAt}` : ' onward'})
-                </p>
-                <p className="text-xs text-slate-400 dark:text-slate-500">
-                  Sat +{Math.round((job.saturdayMultiplier - 1) * 100)}% · Sun +{Math.round((job.sundayMultiplier - 1) * 100)}% · PH +
-                  {Math.round((job.publicHolidayMultiplier - 1) * 100)}%
-                  {job.casualLoadingPercent > 0 && ` · Casual loading ${job.casualLoadingPercent}%`}
-                  {job.includeSuper && ` · Super ${job.superRatePercent}%`}
-                </p>
+          <Card key={job.id} className={`flex flex-col ${job.archived ? 'opacity-60' : ''}`}>
+            <div className="flex items-start justify-between gap-2">
+              <Badge color={job.color}>{job.name}</Badge>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {!job.taxable && (
+                  <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+                    Cash
+                  </span>
+                )}
+                {job.archived && (
+                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+                    Archived
+                  </span>
+                )}
               </div>
-              <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                <Button variant="secondary" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditingJob(job)}>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <RateTile label="Day rate" value={`$${job.morningRate.toFixed(2)}`} hint="Standard hours" />
+              <RateTile
+                label="Night rate"
+                value={`$${job.nightRate.toFixed(2)}`}
+                hint={job.nightRateEndsAt ? `${job.nightRateStartsAt} – ${job.nightRateEndsAt}` : `From ${job.nightRateStartsAt}`}
+              />
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <LoadingChip label="Sat" value={`+${Math.round((job.saturdayMultiplier - 1) * 100)}%`} />
+              <LoadingChip label="Sun" value={`+${Math.round((job.sundayMultiplier - 1) * 100)}%`} />
+              <LoadingChip label="PH" value={`+${Math.round((job.publicHolidayMultiplier - 1) * 100)}%`} />
+              {job.casualLoadingPercent > 0 && <LoadingChip label="Casual" value={`${job.casualLoadingPercent}%`} />}
+              {job.includeSuper && <LoadingChip label="Super" value={`${job.superRatePercent}%`} />}
+            </div>
+
+            <div className="mt-auto pt-4">
+              <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 dark:border-slate-700">
+                <Button variant="secondary" className="w-full px-2!" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditingJob(job)}>
                   Edit
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="secondary"
+                  className="w-full px-2!"
                   icon={job.archived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
                   onClick={() => toggleArchive(job)}
                 >
-                  {job.archived ? 'Unarchive' : 'Archive'}
+                  {job.archived ? 'Restore' : 'Archive'}
                 </Button>
-                <Button
-                  variant="danger"
-                  icon={<Trash2 className="h-3.5 w-3.5" />}
-                  onClick={() => handleDelete(job)}
-                >
+                <Button variant="danger" className="w-full px-2!" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => handleDelete(job)}>
                   Delete
                 </Button>
               </div>
@@ -102,5 +111,26 @@ export function JobsPage() {
         </Modal>
       )}
     </div>
+  );
+}
+
+function RateTile({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/40">
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-0.5 text-lg font-bold tabular-nums tracking-tight text-slate-900 dark:text-slate-100">
+        {value}
+        <span className="text-xs font-medium text-slate-400 dark:text-slate-500">/hr</span>
+      </p>
+      <p className="text-xs tabular-nums text-slate-400 dark:text-slate-500">{hint}</p>
+    </div>
+  );
+}
+
+function LoadingChip({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="rounded-full border border-slate-200 px-2.5 py-0.5 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+      {label} <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{value}</span>
+    </span>
   );
 }

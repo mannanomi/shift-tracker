@@ -6,8 +6,11 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
     // top, otherwise flexbox centers the overflow equally above and below, clipping the top
     // of the content (title, first field) above the scrollable area with no way to scroll
     // back up to it — Safari in particular enforces this clipping strictly.
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-[2px] dark:bg-black/60">
-      <div className="my-8 w-full max-w-lg rounded-2xl bg-white shadow-xl dark:bg-slate-800">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-[2px] dark:bg-black/60"
+      style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
+    >
+      <div className="my-4 w-full max-w-lg sm:my-8 rounded-2xl bg-white shadow-xl dark:bg-slate-800">
         <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-2xl border-b border-slate-100 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-800">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
           <button

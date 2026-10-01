@@ -212,7 +212,7 @@ export function ShiftForm({
           <span className="mb-1 flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-300">
             <Repeat className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" /> Repeat
           </span>
-          <div className="grid grid-cols-[1fr_auto] gap-2">
+          <div className={`grid gap-2 ${repeat !== 'none' ? 'grid-cols-[minmax(0,1fr)_auto]' : ''}`}>
             <Select value={repeat} onChange={(e) => setRepeat(e.target.value as RepeatMode)}>
               <option value="none">Don't repeat</option>
               <option value="weekly">Every week</option>
