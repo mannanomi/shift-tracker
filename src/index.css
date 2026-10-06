@@ -35,6 +35,8 @@
   --animate-glow-a: glow-drift-a 14s ease-in-out infinite alternate;
   --animate-glow-b: glow-drift-b 18s ease-in-out infinite alternate;
   --animate-soft-pulse: soft-pulse 2s ease-in-out infinite;
+  --animate-month-next: month-next 0.3s var(--ease-out-soft) backwards;
+  --animate-month-prev: month-prev 0.3s var(--ease-out-soft) backwards;
 
   @keyframes fade-up {
     from {
@@ -103,6 +105,18 @@
     }
     to {
       transform: translate(-30%, -15%) scale(0.9);
+    }
+  }
+  @keyframes month-next {
+    from {
+      opacity: 0;
+      transform: translateX(28px);
+    }
+  }
+  @keyframes month-prev {
+    from {
+      opacity: 0;
+      transform: translateX(-28px);
     }
   }
   @keyframes soft-pulse {

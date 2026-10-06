@@ -20,6 +20,7 @@ export function ShiftLineCard({
   onDelete,
   onCopy,
   index = 0,
+  showDate = true,
 }: {
   shift: Shift;
   job: Job;
@@ -31,6 +32,8 @@ export function ShiftLineCard({
   onCopy: () => void;
   /** Position in a list, used to cascade the entrance animation. */
   index?: number;
+  /** Hide the date where the surrounding view already shows it (the calendar's day list). */
+  showDate?: boolean;
 }) {
   const swipe = useSwipe({ onSwipeLeft: onDelete, onSwipeRight: onCopy });
   const isAbn = job.kind === 'abn';
@@ -72,9 +75,11 @@ export function ShiftLineCard({
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge color={job.color}>{job.name}</Badge>
-            <span className="text-sm text-slate-700 dark:text-slate-300">
-              {parseDateOnly(shift.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
-            </span>
+            {showDate && (
+              <span className="text-sm text-slate-700 dark:text-slate-300">
+                {parseDateOnly(shift.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
+              </span>
+            )}
             {isAbn ? (
               <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
                 ABN

@@ -31,7 +31,16 @@ export function useCountUp(target: number, enabled: boolean) {
       if (t < 1) frame = requestAnimationFrame(step);
     };
     frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
+    // Animation frames pause when the page isn't being drawn; never leave a stale figure showing.
+    const settle = setTimeout(() => {
+      cancelAnimationFrame(frame);
+      fromRef.current = target;
+      setValue(target);
+    }, duration + 100);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(settle);
+    };
   }, [target, enabled]);
 
   return value;
