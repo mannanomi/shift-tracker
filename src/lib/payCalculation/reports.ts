@@ -1,6 +1,6 @@
-import type { Job, PublicHoliday, Shift } from '../../types';
+import { incomeCategory, type IncomeCategory, type Job, type PublicHoliday, type Shift } from '../../types';
 import { startOfWeekStr } from '../dateUtils';
-import { computeWeekPay } from './engine';
+import { computeWeekPay, determineDayType } from './engine';
 import type { ShiftWeeklyBreakdown } from './types';
 
 export interface ShiftLine {
@@ -19,6 +19,8 @@ export interface JobSubtotal {
   shiftCount: number;
   /** false for cash-in-hand jobs excluded from the tax estimate. */
   taxable: boolean;
+  /** Wages (tax withheld), cash-in-hand, or ABN income — each shown and taxed differently. */
+  category: IncomeCategory;
 }
 
 export interface RangeReport {
@@ -28,10 +30,12 @@ export interface RangeReport {
   jobSubtotals: JobSubtotal[];
   /** Every job combined, taxable or not — the real total money earned this period. */
   totalGrossPay: number;
-  /** Only jobs marked taxable — this is what the tax estimate should be based on. */
+  /** Wages from taxable (PAYG) jobs — what the after-tax estimate is based on. Excludes ABN income. */
   taxableGrossPay: number;
   /** Only jobs marked non-taxable (cash-in-hand) — earned but not fed into the tax estimate. */
   nonTaxableGrossPay: number;
+  /** ABN / gig earnings: taxable, but no tax is withheld, so it's tracked (and set aside for) separately. */
+  abnGrossPay: number;
   totalSuper: number;
   totalHours: number;
 }
@@ -52,6 +56,12 @@ function computeAllShiftLines(
 
   for (const job of jobs) {
     const jobShifts = shifts.filter((s) => s.jobId === job.id);
+    if (job.kind === 'abn') {
+      for (const shift of jobShifts) {
+        lines.push({ shift, job, breakdown: earningsBreakdown(shift, publicHolidays) });
+      }
+      continue;
+    }
     const byWeek = new Map<string, Shift[]>();
     for (const shift of jobShifts) {
       const weekKey = startOfWeekStr(shift.date, weekStartDay);
@@ -95,6 +105,7 @@ export function buildRangeReport(
       hours: 0,
       shiftCount: 0,
       taxable: line.job.taxable,
+      category: incomeCategory(line.job),
     };
     existing.grossPay += line.breakdown.finalGrossPay;
     existing.superAmount += line.breakdown.superAmount;
@@ -111,9 +122,48 @@ export function buildRangeReport(
     shiftLines: shiftLines.sort((a, b) => a.shift.date.localeCompare(b.shift.date)),
     jobSubtotals,
     totalGrossPay: jobSubtotals.reduce((sum, j) => sum + j.grossPay, 0),
-    taxableGrossPay: jobSubtotals.filter((j) => j.taxable).reduce((sum, j) => sum + j.grossPay, 0),
-    nonTaxableGrossPay: jobSubtotals.filter((j) => !j.taxable).reduce((sum, j) => sum + j.grossPay, 0),
+    taxableGrossPay: sumWhere(jobSubtotals, 'payg'),
+    nonTaxableGrossPay: sumWhere(jobSubtotals, 'cash'),
+    abnGrossPay: sumWhere(jobSubtotals, 'abn'),
     totalSuper: jobSubtotals.reduce((sum, j) => sum + j.superAmount, 0),
     totalHours: jobSubtotals.reduce((sum, j) => sum + j.hours, 0),
+  };
+}
+
+function sumWhere(subtotals: JobSubtotal[], category: IncomeCategory): number {
+  return subtotals.filter((j) => j.category === category).reduce((sum, j) => sum + j.grossPay, 0);
+}
+
+/**
+ * An ABN day entry has no rates or times to calculate from — it's simply the amount earned,
+ * plus optional hours worked. Shaped like a calculated shift so lists, totals and charts treat
+ * it the same way.
+ */
+function earningsBreakdown(shift: Shift, publicHolidays: PublicHoliday[]): ShiftWeeklyBreakdown {
+  const hours = Math.max(0, shift.hoursWorked ?? 0);
+  const pay = Math.max(0, shift.earnings ?? 0);
+  return {
+    shiftId: shift.id,
+    workedHours: hours,
+    rateLabel: 'morning',
+    baseRate: 0,
+    casualLoadedRate: 0,
+    dayType: determineDayType(shift, publicHolidays),
+    dayMultiplier: 1,
+    loadedHourlyRate: hours > 0 ? pay / hours : 0,
+    regularHours: hours,
+    regularSegments: [],
+    overtimeSegments: [],
+    regularPay: pay,
+    overtimePay: 0,
+    grossPay: pay,
+    weeklyOvertimeSegments: [],
+    weeklyOvertimeHours: 0,
+    weeklyOvertimePay: 0,
+    finalRegularHours: hours,
+    finalRegularSegments: [],
+    finalRegularPay: pay,
+    finalGrossPay: pay,
+    superAmount: 0,
   };
 }

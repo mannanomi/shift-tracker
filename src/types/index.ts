@@ -6,9 +6,19 @@ export interface OvertimeTier {
   multiplier: number;
 }
 
+/**
+ * 'hourly': pay is calculated from shift times and the job's rates.
+ * 'abn': self-employed / gig work (e.g. Uber) — each day's earnings are entered by hand.
+ */
+export type JobKind = 'hourly' | 'abn';
+
+/** How a job's income is treated: wages with tax withheld, cash-in-hand, or ABN (taxable, nothing withheld). */
+export type IncomeCategory = 'payg' | 'cash' | 'abn';
+
 export interface Job {
   id: string;
   name: string;
+  kind: JobKind;
   /** Hex color used for badges/calendar chips. */
   color: string;
   archived: boolean;
@@ -82,6 +92,15 @@ export interface Shift {
   /** null = auto-detect from the PublicHoliday list; true/false forces the flag. */
   isPublicHolidayOverride: boolean | null;
   notes: string;
+  /** ABN jobs only: the amount earned that day (startTime/endTime are left empty). */
+  earnings?: number;
+  /** ABN jobs only: hours worked that day, if recorded (used for $/hr). */
+  hoursWorked?: number;
+}
+
+export function incomeCategory(job: Pick<Job, 'kind' | 'taxable'>): IncomeCategory {
+  if (job.kind === 'abn') return 'abn';
+  return job.taxable ? 'payg' : 'cash';
 }
 
 export interface AppSettings {
@@ -123,6 +142,7 @@ export interface Payslip {
 export function normalizeJob(job: Job): Job {
   return {
     ...job,
+    kind: job.kind ?? 'hourly',
     nightRateMode: job.nightRateMode ?? 'custom',
     nightLoadingPercent: job.nightLoadingPercent ?? 21,
     taxable: job.taxable ?? true,
@@ -136,6 +156,7 @@ export function createDefaultJob(overrides: Partial<Job> = {}): Job {
   return {
     id: crypto.randomUUID(),
     name: '',
+    kind: 'hourly',
     color: '#3b82f6',
     archived: false,
     morningRate: 0,

@@ -58,21 +58,25 @@ function Splash({ message }: { message: string }) {
 
 /** One-tap Quick add sheet, with a way through to the full shift form. */
 function QuickAddFlow({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [fullFormDate, setFullFormDate] = useState<string | null>(null);
+  const [fullForm, setFullForm] = useState<{ date: string; jobId?: string } | null>(null);
   return (
     <>
       {open && (
         <QuickAddSheet
           onClose={onClose}
-          onMoreOptions={(date) => {
+          onMoreOptions={(date, jobId) => {
             onClose();
-            setFullFormDate(date);
+            setFullForm({ date, jobId });
           }}
         />
       )}
-      {fullFormDate && (
-        <Modal title="Add shift" onClose={() => setFullFormDate(null)}>
-          <ShiftForm initialDate={fullFormDate} onDone={() => setFullFormDate(null)} />
+      {fullForm && (
+        <Modal title={fullForm.jobId ? 'Add earnings' : 'Add shift'} onClose={() => setFullForm(null)}>
+          <ShiftForm
+            initialDate={fullForm.date}
+            template={fullForm.jobId ? { jobId: fullForm.jobId } : undefined}
+            onDone={() => setFullForm(null)}
+          />
         </Modal>
       )}
     </>

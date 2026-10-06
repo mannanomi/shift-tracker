@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { addDays } from 'date-fns';
-import { Banknote, PiggyBank, Plus, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { Banknote, PiggyBank, Plus, Receipt, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import type { Goal } from '../types';
 import { useJobs, usePublicHolidays, useSettings, useShifts } from '../hooks/useData';
 import { buildRangeReport, type RangeReport, type ShiftLine } from '../lib/payCalculation/reports';
@@ -15,7 +15,7 @@ import {
   startOfWeekStr,
 } from '../lib/dateUtils';
 import { formatCurrency, formatHours } from '../lib/format';
-import { estimateNetForPeriod } from '../lib/tax/auIncomeTax';
+import { estimateAbnSetAside, estimateNetForPeriod } from '../lib/tax/auIncomeTax';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -57,6 +57,7 @@ export function Dashboard() {
     if (!reports) return null;
     const now = new Date();
     const pending = reports.upcoming.shiftLines
+      .filter((line) => line.job.kind !== 'abn')
       .map((line) => ({ line, ...resolveShiftTimes(line.shift.date, line.shift.startTime, line.shift.endTime) }))
       .filter(({ end }) => end > now)
       .sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -65,7 +66,9 @@ export function Dashboard() {
 
   if (!reports || !settings) return null;
 
-  const hasCashJob = (jobs ?? []).some((j) => !j.taxable);
+  const hasCashJob = (jobs ?? []).some((j) => j.kind !== 'abn' && !j.taxable);
+  const hasAbnJob = (jobs ?? []).some((j) => j.kind === 'abn');
+  const incomeCards = 1 + Number(hasCashJob) + Number(hasAbnJob);
   const helpDebt = Boolean(settings.hasHelpDebt);
   const goals = settings.goals ?? [];
 
@@ -90,7 +93,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <PayCycleHero report={reports.fortnight} today={today} helpDebt={helpDebt} />
+      <PayCycleHero report={reports.fortnight} today={today} helpDebt={helpDebt} showAbn={hasAbnJob} />
       <KpiStrip week={reports.week} prevWeek={reports.prevWeek} />
 
       <div className="grid gap-4 lg:grid-cols-2 lg:gap-6 lg:*:h-full">
@@ -100,16 +103,20 @@ export function Dashboard() {
         {goals.length > 0 && <GoalsCard goals={goals} report={reports.fortnight} helpDebt={helpDebt} />}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2 lg:gap-6 lg:*:h-full">
-        <div className={`lg:*:h-full ${hasCashJob ? '' : 'lg:col-span-2'}`}>
+      <div
+        className={`grid gap-4 lg:gap-6 lg:*:h-full ${incomeCards === 3 ? 'lg:grid-cols-3' : incomeCards === 2 ? 'lg:grid-cols-2' : ''}`}
+      >
+        <div className="lg:*:h-full">
           <TaxableSummary week={reports.week} fortnight={reports.fortnight} helpDebt={helpDebt} />
         </div>
         {hasCashJob && <CashCard week={reports.week} fortnight={reports.fortnight} />}
+        {hasAbnJob && <AbnCard week={reports.week} fortnight={reports.fortnight} helpDebt={helpDebt} />}
       </div>
 
       <p className="text-xs text-slate-400 dark:text-slate-500">
         After-tax figures are an estimate (AU resident rates + Medicare levy{helpDebt ? ' + HECS/HELP' : ''}, annualized from
         each period's taxable earnings). Cash income is kept separate and not taxed or added to taxable totals.
+        {hasAbnJob && ' ABN income has no tax taken out; the set-aside amount is the extra tax it adds on top of your wages.'}
       </p>
 
       {addingShift && (
@@ -133,15 +140,29 @@ function fmtShort(date: string) {
 }
 
 /** The current fortnight: earned so far, what's scheduled, and where you are in the cycle. */
-function PayCycleHero({ report, today, helpDebt }: { report: RangeReport; today: string; helpDebt: boolean }) {
+function PayCycleHero({
+  report,
+  today,
+  helpDebt,
+  showAbn,
+}: {
+  report: RangeReport;
+  today: string;
+  helpDebt: boolean;
+  showAbn: boolean;
+}) {
   const days = dateRangeStrs(report.startDate, report.endDate);
   const dayNumber = days.indexOf(today) + 1;
   const now = new Date();
   let earned = 0;
   let scheduled = 0;
   for (const line of report.shiftLines) {
-    const { end } = resolveShiftTimes(line.shift.date, line.shift.startTime, line.shift.endTime);
-    if (end <= now) earned += line.breakdown.finalGrossPay;
+    // ABN entries have no times: they count as earned once their day has arrived.
+    const done =
+      line.job.kind === 'abn'
+        ? line.shift.date <= today
+        : resolveShiftTimes(line.shift.date, line.shift.startTime, line.shift.endTime).end <= now;
+    if (done) earned += line.breakdown.finalGrossPay;
     else scheduled += line.breakdown.finalGrossPay;
   }
   const afterTax = estimateNetForPeriod(report.taxableGrossPay, 26, { helpDebt }).periodNetIncome;
@@ -197,9 +218,10 @@ function PayCycleHero({ report, today, helpDebt }: { report: RangeReport; today:
       </div>
       <p className="mt-1.5 text-xs text-brand-100">{daysLeft === 0 ? 'Last day of this cycle' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`}</p>
 
-      <div className="mt-4 grid grid-cols-3 gap-3 border-t border-white/15 pt-3">
+      <div className={`mt-4 grid gap-3 border-t border-white/15 pt-3 ${showAbn ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
         <HeroStat label="After tax ≈" value={afterTax} format={formatCurrency} />
         <HeroStat label="Cash" value={report.nonTaxableGrossPay} format={formatCurrency} />
+        {showAbn && <HeroStat label="ABN" value={report.abnGrossPay} format={formatCurrency} />}
         <HeroStat label="Hours" value={report.totalHours} format={formatHours} />
       </div>
       <p className="mt-1.5 text-[11px] text-brand-100/80">Whole fortnight, including scheduled shifts</p>
@@ -273,9 +295,13 @@ function Kpi({ label, value, hint }: { label: string; value: React.ReactNode; hi
   );
 }
 
-/** Take-home pay this fortnight (after-tax taxable + cash) filling each goal in order. */
+/** Take-home pay this fortnight (wages after tax + cash + ABN after setting tax aside) filling each goal in order. */
 function GoalsCard({ goals, report, helpDebt }: { goals: Goal[]; report: RangeReport; helpDebt: boolean }) {
-  const takeHome = estimateNetForPeriod(report.taxableGrossPay, 26, { helpDebt }).periodNetIncome + report.nonTaxableGrossPay;
+  const takeHome =
+    estimateNetForPeriod(report.taxableGrossPay, 26, { helpDebt }).periodNetIncome +
+    report.nonTaxableGrossPay +
+    report.abnGrossPay -
+    estimateAbnSetAside(report.taxableGrossPay, report.abnGrossPay, 26, { helpDebt });
   const needed = goals.reduce((sum, g) => sum + g.amount, 0);
   let remaining = takeHome;
 
@@ -313,7 +339,7 @@ function GoalsCard({ goals, report, helpDebt }: { goals: Goal[]; report: RangeRe
 
 /** Cash-in-hand income, laid out like Taxable income but kept visually apart (amber, untaxed). */
 function CashCard({ week, fortnight }: { week: RangeReport; fortnight: RangeReport }) {
-  const jobs = fortnight.jobSubtotals.filter((j) => !j.taxable);
+  const jobs = fortnight.jobSubtotals.filter((j) => j.category === 'cash');
   const weekByJob = new Map(week.jobSubtotals.map((j) => [j.jobId, j.grossPay]));
   return (
     <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800/50 dark:bg-amber-500/5">
@@ -323,7 +349,7 @@ function CashCard({ week, fortnight }: { week: RangeReport; fortnight: RangeRepo
         <span className="ml-auto text-xs">Untaxed · not in taxable totals</span>
       </div>
       <div className="mt-3 grid grid-cols-2 divide-x divide-amber-200/70 dark:divide-amber-800/40">
-        <CashColumn title="This week" amount={week.nonTaxableGrossPay} hours={week.jobSubtotals.filter((j) => !j.taxable).reduce((sum, j) => sum + j.hours, 0)} />
+        <CashColumn title="This week" amount={week.nonTaxableGrossPay} hours={week.jobSubtotals.filter((j) => j.category === 'cash').reduce((sum, j) => sum + j.hours, 0)} />
         <div className="pl-4">
           <CashColumn title="This fortnight" amount={fortnight.nonTaxableGrossPay} hours={jobs.reduce((sum, j) => sum + j.hours, 0)} />
         </div>
@@ -346,7 +372,50 @@ function CashColumn({ title, amount, hours }: { title: string; amount: number; h
   );
 }
 
-/** Per-job week and fortnight amounts, shared by the Taxable and Cash cards. */
+/** ABN / gig income: taxable but nothing withheld, so it shows how much to set aside for tax. */
+function AbnCard({ week, fortnight, helpDebt }: { week: RangeReport; fortnight: RangeReport; helpDebt: boolean }) {
+  const jobs = fortnight.jobSubtotals.filter((j) => j.category === 'abn');
+  const weekByJob = new Map(week.jobSubtotals.map((j) => [j.jobId, j.grossPay]));
+  return (
+    <Card className="border-violet-200 bg-violet-50/50 dark:border-violet-800/50 dark:bg-violet-500/5">
+      <div className="flex items-center gap-1.5 text-violet-700 dark:text-violet-300">
+        <Receipt className="h-4 w-4" />
+        <h2 className="text-sm font-medium">ABN income</h2>
+        <span className="ml-auto text-xs">Taxable · no tax withheld</span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 divide-x divide-violet-200/70 dark:divide-violet-800/40">
+        <AbnColumn
+          title="This week"
+          amount={week.abnGrossPay}
+          setAside={estimateAbnSetAside(week.taxableGrossPay, week.abnGrossPay, 52, { helpDebt })}
+        />
+        <div className="pl-4">
+          <AbnColumn
+            title="This fortnight"
+            amount={fortnight.abnGrossPay}
+            setAside={estimateAbnSetAside(fortnight.taxableGrossPay, fortnight.abnGrossPay, 26, { helpDebt })}
+          />
+        </div>
+      </div>
+      <JobTable jobs={jobs} weekByJob={weekByJob} tone="violet" />
+    </Card>
+  );
+}
+
+function AbnColumn({ title, amount, setAside }: { title: string; amount: number; setAside: number }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-violet-700/70 dark:text-violet-300/70">{title}</p>
+      <p className="text-xl font-bold tracking-tight text-slate-900 lg:text-2xl dark:text-slate-100">
+        <Money amount={amount} />
+      </p>
+      <p className="mt-1 text-[11px] font-medium text-violet-700/70 dark:text-violet-300/70">Set aside for tax ≈</p>
+      <p className="text-sm font-semibold tabular-nums text-violet-700 dark:text-violet-300">{formatCurrency(setAside)}</p>
+    </div>
+  );
+}
+
+/** Per-job week and fortnight amounts, shared by the Taxable, Cash and ABN cards. */
 function JobTable({
   jobs,
   weekByJob,
@@ -354,10 +423,14 @@ function JobTable({
 }: {
   jobs: RangeReport['jobSubtotals'];
   weekByJob: Map<string, number>;
-  tone: 'slate' | 'amber';
+  tone: 'slate' | 'amber' | 'violet';
 }) {
   if (jobs.length === 0) return null;
-  const rule = tone === 'amber' ? 'border-amber-200/70 dark:border-amber-800/40' : 'border-slate-100 dark:border-slate-700';
+  const rule = {
+    slate: 'border-slate-100 dark:border-slate-700',
+    amber: 'border-amber-200/70 dark:border-amber-800/40',
+    violet: 'border-violet-200/70 dark:border-violet-800/40',
+  }[tone];
   return (
     <table className={`mt-3 w-full border-t text-xs ${rule}`}>
       <thead>
@@ -387,7 +460,7 @@ function JobTable({
 
 /** Taxable income for the week and fortnight, with the after-tax estimate and per-job split. */
 function TaxableSummary({ week, fortnight, helpDebt }: { week: RangeReport; fortnight: RangeReport; helpDebt: boolean }) {
-  const jobs = fortnight.jobSubtotals.filter((j) => j.taxable);
+  const jobs = fortnight.jobSubtotals.filter((j) => j.category === 'payg');
   const weekByJob = new Map(week.jobSubtotals.map((j) => [j.jobId, j.grossPay]));
   return (
     <Card>

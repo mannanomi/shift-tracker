@@ -116,7 +116,8 @@ export function NextShiftCard({ next, publicHolidays }: { next: ShiftLine | null
     toast(planned ? `${job.name} shift updated with actual times` : `${job.name} shift saved`);
   }
 
-  const jobs = activeJobs ?? [];
+  // The timer records start/end times, which ABN (daily earnings) jobs don't use.
+  const jobs = (activeJobs ?? []).filter((j) => j.kind !== 'abn');
   const selectedId = pickedJobId ?? next?.job.id ?? jobs[0]?.id ?? null;
   const nextStart = next ? resolveShiftTimes(next.shift.date, next.shift.startTime, next.shift.endTime).start : null;
   const canStartNext = Boolean(next && nextStart && nextStart.getTime() - now.getTime() <= START_WINDOW_MS);

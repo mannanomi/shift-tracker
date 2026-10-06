@@ -81,4 +81,31 @@ describe('buildRangeReport', () => {
     expect(report.shiftLines).toHaveLength(1);
     expect(report.shiftLines[0].shift.date).toBe('2026-09-14');
   });
+
+  it('counts ABN day entries at the amount entered, kept apart from wages and cash', () => {
+    const wages = createDefaultJob({ id: 'job-w', name: 'Care', morningRate: 30 });
+    const cash = createDefaultJob({ id: 'job-c', name: 'Cafe', morningRate: 20, taxable: false });
+    const uber = createDefaultJob({ id: 'job-u', name: 'Uber Eats', kind: 'abn' });
+    const shifts = [
+      makeShift({ jobId: 'job-w', date: '2026-09-14', startTime: '09:00', endTime: '13:00' }), // 4h @30 = 120
+      makeShift({ jobId: 'job-c', date: '2026-09-15', startTime: '09:00', endTime: '11:00' }), // 2h @20 = 40
+      makeShift({ jobId: 'job-u', date: '2026-09-19', startTime: '', endTime: '', earnings: 182.5, hoursWorked: 5 }),
+      makeShift({ jobId: 'job-u', date: '2026-09-20', startTime: '', endTime: '', earnings: 95 }), // no hours recorded
+    ];
+    const report = buildRangeReport('2026-09-14', '2026-09-20', [wages, cash, uber], shifts, [], 1);
+
+    expect(report.taxableGrossPay).toBeCloseTo(120);
+    expect(report.nonTaxableGrossPay).toBeCloseTo(40);
+    expect(report.abnGrossPay).toBeCloseTo(277.5);
+    expect(report.totalGrossPay).toBeCloseTo(437.5);
+    expect(report.totalHours).toBeCloseTo(11); // 4 + 2 + 5 (+0 for the entry without hours)
+    expect(report.totalSuper).toBe(0);
+
+    const uberSubtotal = report.jobSubtotals.find((j) => j.jobId === 'job-u')!;
+    expect(uberSubtotal.category).toBe('abn');
+    expect(uberSubtotal.shiftCount).toBe(2);
+    const saturday = report.shiftLines.find((l) => l.shift.date === '2026-09-19')!;
+    expect(saturday.breakdown.dayType).toBe('saturday');
+    expect(saturday.breakdown.loadedHourlyRate).toBeCloseTo(36.5);
+  });
 });

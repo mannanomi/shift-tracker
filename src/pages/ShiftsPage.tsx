@@ -205,7 +205,16 @@ export function ShiftsPage() {
       )}
 
       {formTarget && (
-        <Modal title={formTarget.mode === 'new' ? 'Add shift' : 'Edit shift'} onClose={() => setFormTarget(null)}>
+        <Modal
+          title={
+            formTarget.mode === 'new'
+              ? 'Add shift'
+              : jobs?.find((j) => j.id === formTarget.shift.jobId)?.kind === 'abn'
+                ? 'Edit earnings'
+                : 'Edit shift'
+          }
+          onClose={() => setFormTarget(null)}
+        >
           <ShiftForm
             shift={formTarget.mode === 'edit' ? formTarget.shift : undefined}
             initialDate={formTarget.mode === 'new' ? formTarget.date : undefined}

@@ -23,6 +23,8 @@ function Difference({ paid, calculated }: { paid: number; calculated: number }) 
 /** Compare what each employer paid for this period against the calculated gross. */
 export function PayslipCheckCard({ report, settings }: { report: RangeReport; settings: AppSettings }) {
   const payslips = settings.payslips ?? [];
+  // ABN earnings are entered as paid, so there's no payslip to check them against.
+  const employerJobs = report.jobSubtotals.filter((j) => j.category !== 'abn');
   const find = (jobId: string) =>
     payslips.find((p) => p.jobId === jobId && p.periodStart === report.startDate && p.periodEnd === report.endDate);
 
@@ -42,11 +44,11 @@ export function PayslipCheckCard({ report, settings }: { report: RangeReport; se
         <ReceiptText className="h-4 w-4" /> Payslip check
       </h2>
       <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Enter the gross pay on your payslip for this period (before tax, excluding super).</p>
-      {report.jobSubtotals.length === 0 ? (
+      {employerJobs.length === 0 ? (
         <p className="py-4 text-center text-sm text-slate-400 dark:text-slate-500">No shifts in this period.</p>
       ) : (
         <div className="mt-3 space-y-3">
-          {report.jobSubtotals.map((job) => {
+          {employerJobs.map((job) => {
             const saved = find(job.jobId);
             return (
               <div key={`${job.jobId}|${report.startDate}|${report.endDate}`} className="grid grid-cols-[1fr_7.5rem] items-center gap-x-3 gap-y-0.5">

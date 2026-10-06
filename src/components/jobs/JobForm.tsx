@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Check, ChevronDown, Clock, DollarSign, PiggyBank, Plus, Timer, Wallet } from 'lucide-react';
-import { createDefaultJob, normalizeJob, type Job } from '../../types';
+import { Bike, Check, ChevronDown, Clock, DollarSign, PiggyBank, Plus, Receipt, Timer, Wallet } from 'lucide-react';
+import { createDefaultJob, normalizeJob, type Job, type JobKind } from '../../types';
 import { jobsRepo } from '../../db/repository';
 import { formatCurrency } from '../../lib/format';
 import { Button } from '../ui/Button';
@@ -47,6 +47,8 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
     await jobsRepo.put({
       ...form,
       nightRate: computedNightRate,
+      // ABN income is always taxable (just not withheld), and earns no super.
+      ...(form.kind === 'abn' ? { taxable: true, includeSuper: false } : {}),
       updatedAt: new Date().toISOString(),
     });
     onDone();
@@ -56,13 +58,15 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Basics */}
       <div className="space-y-4">
+        <JobKindPicker value={form.kind} locked={Boolean(job)} onChange={(kind) => update('kind', kind)} />
+
         <Field label="Job name">
           <Input
             required
             autoFocus
             value={form.name}
             onChange={(e) => update('name', e.target.value)}
-            placeholder="e.g. Coffee Club"
+            placeholder={form.kind === 'abn' ? 'e.g. Uber Eats' : 'e.g. Coffee Club'}
           />
         </Field>
 
@@ -81,290 +85,298 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
           </div>
         </Field>
 
-        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-          <Checkbox
-            label="Cash-in-hand (don't include in tax estimate)"
-            checked={!form.taxable}
-            onChange={(e) => update('taxable', !e.target.checked)}
-          />
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            Still counted in your total income and shown on its own, but left out of the annualized income used to
-            estimate tax on the Dashboard and Reports.
-          </p>
-        </div>
+        {form.kind === 'hourly' ? (
+          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <Checkbox
+              label="Cash-in-hand (don't include in tax estimate)"
+              checked={!form.taxable}
+              onChange={(e) => update('taxable', !e.target.checked)}
+            />
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              Still counted in your total income and shown on its own, but left out of the annualized income used to
+              estimate tax on the Dashboard and Reports.
+            </p>
+          </div>
+        ) : (
+          <AbnNote />
+        )}
       </div>
 
-      {/* Pay rates */}
-      <Section icon={<DollarSign className="h-4 w-4" />} title="Pay rates" subtitle="Your normal hourly rate, and how night shifts are paid.">
-        <Field label="Base hourly rate ($/hr)">
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            required
-            value={form.morningRate || ''}
-            onChange={(e) => update('morningRate', Number(e.target.value))}
-            placeholder="25.00"
-          />
-        </Field>
-
-        <div className="rounded-lg border border-slate-200 p-3 space-y-3 dark:border-slate-700">
-          <Checkbox
-            label="Auto-calculate night rate from base rate"
-            checked={form.nightRateMode === 'auto'}
-            onChange={(e) => update('nightRateMode', e.target.checked ? 'auto' : 'custom')}
-          />
-
-          {form.nightRateMode === 'auto' ? (
-            <div className="flex items-center gap-3">
-              <Field label="Night loading (%)">
-                <Input
-                  type="number"
-                  step="1"
-                  min="0"
-                  className="w-28"
-                  value={form.nightLoadingPercent}
-                  onChange={(e) => update('nightLoadingPercent', Number(e.target.value))}
-                />
-              </Field>
-              <p className="pt-5 text-sm text-slate-500 dark:text-slate-400">
-                = <span className="font-medium text-slate-700 dark:text-slate-200">{formatCurrency(computedNightRate)}/hr</span> at
-                night
-              </p>
-            </div>
-          ) : (
-            <Field label="Night rate ($/hr)">
+      {form.kind === 'hourly' && (
+        <>
+          {/* Pay rates */}
+          <Section icon={<DollarSign className="h-4 w-4" />} title="Pay rates" subtitle="Your normal hourly rate, and how night shifts are paid.">
+            <Field label="Base hourly rate ($/hr)">
               <Input
                 type="number"
                 step="0.01"
                 min="0"
-                value={form.nightRate || ''}
-                onChange={(e) => update('nightRate', Number(e.target.value))}
+                required
+                value={form.morningRate || ''}
+                onChange={(e) => update('morningRate', Number(e.target.value))}
+                placeholder="25.00"
               />
             </Field>
-          )}
 
-          <Field label="Night rate applies from (shift start time)">
-            <div className="relative">
-              <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
-              <Input
-                type="time"
-                required
-                className="pl-9"
-                value={form.nightRateStartsAt}
-                onChange={(e) => update('nightRateStartsAt', e.target.value)}
+            <div className="rounded-lg border border-slate-200 p-3 space-y-3 dark:border-slate-700">
+              <Checkbox
+                label="Auto-calculate night rate from base rate"
+                checked={form.nightRateMode === 'auto'}
+                onChange={(e) => update('nightRateMode', e.target.checked ? 'auto' : 'custom')}
               />
-            </div>
-          </Field>
 
-          <Checkbox
-            label="Night rate ends at a set time"
-            checked={form.nightRateEndsAt !== null}
-            onChange={(e) => update('nightRateEndsAt', e.target.checked ? '06:00' : null)}
-          />
-          {form.nightRateEndsAt !== null && (
-            <>
-              <Field label="Night rate ends at (switches back to day rate)">
+              {form.nightRateMode === 'auto' ? (
+                <div className="flex items-center gap-3">
+                  <Field label="Night loading (%)">
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0"
+                      className="w-28"
+                      value={form.nightLoadingPercent}
+                      onChange={(e) => update('nightLoadingPercent', Number(e.target.value))}
+                    />
+                  </Field>
+                  <p className="pt-5 text-sm text-slate-500 dark:text-slate-400">
+                    = <span className="font-medium text-slate-700 dark:text-slate-200">{formatCurrency(computedNightRate)}/hr</span> at
+                    night
+                  </p>
+                </div>
+              ) : (
+                <Field label="Night rate ($/hr)">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.nightRate || ''}
+                    onChange={(e) => update('nightRate', Number(e.target.value))}
+                  />
+                </Field>
+              )}
+
+              <Field label="Night rate applies from (shift start time)">
                 <div className="relative">
                   <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
                   <Input
                     type="time"
                     required
                     className="pl-9"
-                    value={form.nightRateEndsAt}
-                    onChange={(e) => update('nightRateEndsAt', e.target.value)}
+                    value={form.nightRateStartsAt}
+                    onChange={(e) => update('nightRateStartsAt', e.target.value)}
                   />
                 </div>
               </Field>
-              <p className="text-xs text-slate-400 dark:text-slate-500">
-                For an overnight shift that runs past this time — e.g. starts 6pm, finishes 8am — the hours after{' '}
-                {form.nightRateEndsAt} are paid at the day rate instead, even though it's one shift.
+
+              <Checkbox
+                label="Night rate ends at a set time"
+                checked={form.nightRateEndsAt !== null}
+                onChange={(e) => update('nightRateEndsAt', e.target.checked ? '06:00' : null)}
+              />
+              {form.nightRateEndsAt !== null && (
+                <>
+                  <Field label="Night rate ends at (switches back to day rate)">
+                    <div className="relative">
+                      <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                      <Input
+                        type="time"
+                        required
+                        className="pl-9"
+                        value={form.nightRateEndsAt}
+                        onChange={(e) => update('nightRateEndsAt', e.target.value)}
+                      />
+                    </div>
+                  </Field>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    For an overnight shift that runs past this time — e.g. starts 6pm, finishes 8am — the hours after{' '}
+                    {form.nightRateEndsAt} are paid at the day rate instead, even though it's one shift.
+                  </p>
+                </>
+              )}
+            </div>
+          </Section>
+
+          {/* Weekend & public holiday loadings */}
+          <Section
+            icon={<Wallet className="h-4 w-4" />}
+            title="Weekend & public holiday pay"
+            subtitle="Extra pay on top of your base rate, as a percentage."
+          >
+            <div className="grid grid-cols-3 gap-3">
+              <PercentField
+                label="Saturday"
+                value={percentMoreFromMultiplier(form.saturdayMultiplier)}
+                onChange={(p) => update('saturdayMultiplier', multiplierFromPercentMore(p))}
+              />
+              <PercentField
+                label="Sunday"
+                value={percentMoreFromMultiplier(form.sundayMultiplier)}
+                onChange={(p) => update('sundayMultiplier', multiplierFromPercentMore(p))}
+              />
+              <PercentField
+                label="Public holiday"
+                value={percentMoreFromMultiplier(form.publicHolidayMultiplier)}
+                onChange={(p) => update('publicHolidayMultiplier', multiplierFromPercentMore(p))}
+              />
+            </div>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              e.g. 50% on Saturday means time-and-a-half; 100% on Sunday means double time. Only the highest applicable
+              one is used if a public holiday falls on a weekend.
+            </p>
+
+            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <Checkbox
+                label="No night loading on weekends or public holidays"
+                checked={form.ignoreNightRateOnWeekendsAndHolidays}
+                onChange={(e) => update('ignoreNightRateOnWeekendsAndHolidays', e.target.checked)}
+              />
+              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                On Saturday, Sunday, and public holidays, always use the day rate as the base — the night-rate window is
+                ignored, so only the weekend/PH loading applies, not night + weekend stacked together. Weekday shifts are
+                unaffected.
               </p>
-            </>
-          )}
-        </div>
-      </Section>
+            </div>
 
-      {/* Weekend & public holiday loadings */}
-      <Section
-        icon={<Wallet className="h-4 w-4" />}
-        title="Weekend & public holiday pay"
-        subtitle="Extra pay on top of your base rate, as a percentage."
-      >
-        <div className="grid grid-cols-3 gap-3">
-          <PercentField
-            label="Saturday"
-            value={percentMoreFromMultiplier(form.saturdayMultiplier)}
-            onChange={(p) => update('saturdayMultiplier', multiplierFromPercentMore(p))}
-          />
-          <PercentField
-            label="Sunday"
-            value={percentMoreFromMultiplier(form.sundayMultiplier)}
-            onChange={(p) => update('sundayMultiplier', multiplierFromPercentMore(p))}
-          />
-          <PercentField
-            label="Public holiday"
-            value={percentMoreFromMultiplier(form.publicHolidayMultiplier)}
-            onChange={(p) => update('publicHolidayMultiplier', multiplierFromPercentMore(p))}
-          />
-        </div>
-        <p className="text-xs text-slate-400 dark:text-slate-500">
-          e.g. 50% on Saturday means time-and-a-half; 100% on Sunday means double time. Only the highest applicable
-          one is used if a public holiday falls on a weekend.
-        </p>
+            <Field label="Casual loading (%)">
+              <Input
+                type="number"
+                step="1"
+                min="0"
+                className="w-28"
+                value={form.casualLoadingPercent || ''}
+                onChange={(e) => update('casualLoadingPercent', Number(e.target.value))}
+                placeholder="0"
+              />
+            </Field>
+          </Section>
 
-        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-          <Checkbox
-            label="No night loading on weekends or public holidays"
-            checked={form.ignoreNightRateOnWeekendsAndHolidays}
-            onChange={(e) => update('ignoreNightRateOnWeekendsAndHolidays', e.target.checked)}
-          />
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            On Saturday, Sunday, and public holidays, always use the day rate as the base — the night-rate window is
-            ignored, so only the weekend/PH loading applies, not night + weekend stacked together. Weekday shifts are
-            unaffected.
-          </p>
-        </div>
+          {/* Live preview */}
+          <RatePreview job={form} computedNightRate={computedNightRate} />
 
-        <Field label="Casual loading (%)">
-          <Input
-            type="number"
-            step="1"
-            min="0"
-            className="w-28"
-            value={form.casualLoadingPercent || ''}
-            onChange={(e) => update('casualLoadingPercent', Number(e.target.value))}
-            placeholder="0"
-          />
-        </Field>
-      </Section>
-
-      {/* Live preview */}
-      <RatePreview job={form} computedNightRate={computedNightRate} />
-
-      {/* Overtime — collapsed by default */}
-      <CollapsibleSection
-        icon={<Timer className="h-4 w-4" />}
-        title="Overtime rules"
-        open={showOvertime}
-        onToggle={() => setShowOvertime((v) => !v)}
-      >
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="OT threshold — hours/day">
-            <Input
-              type="number"
-              step="0.25"
-              min="0"
-              value={form.overtimeThresholdHoursPerDay ?? ''}
-              placeholder="e.g. 8"
-              onChange={(e) => update('overtimeThresholdHoursPerDay', e.target.value === '' ? null : Number(e.target.value))}
-            />
-          </Field>
-          <Field label="OT threshold — hours/week">
-            <Input
-              type="number"
-              step="0.25"
-              min="0"
-              value={form.overtimeThresholdHoursPerWeek ?? ''}
-              placeholder="e.g. 38"
-              onChange={(e) => update('overtimeThresholdHoursPerWeek', e.target.value === '' ? null : Number(e.target.value))}
-            />
-          </Field>
-        </div>
-
-        <Field label="Overtime tiers">
-          <div className="space-y-2">
-            {form.overtimeTiers.map((tier, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="w-14 text-sm text-slate-500 dark:text-slate-400">Tier {i + 1}:</span>
+          {/* Overtime — collapsed by default */}
+          <CollapsibleSection
+            icon={<Timer className="h-4 w-4" />}
+            title="Overtime rules"
+            open={showOvertime}
+            onToggle={() => setShowOvertime((v) => !v)}
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="OT threshold — hours/day">
                 <Input
                   type="number"
                   step="0.25"
                   min="0"
-                  className="w-24"
-                  disabled={!Number.isFinite(tier.hoursInTier) && i === form.overtimeTiers.length - 1}
-                  value={Number.isFinite(tier.hoursInTier) ? tier.hoursInTier : ''}
-                  placeholder={Number.isFinite(tier.hoursInTier) ? undefined : 'remaining'}
-                  onChange={(e) => {
-                    const tiers = [...form.overtimeTiers];
-                    tiers[i] = { ...tiers[i], hoursInTier: e.target.value === '' ? Infinity : Number(e.target.value) };
-                    update('overtimeTiers', tiers);
-                  }}
+                  value={form.overtimeThresholdHoursPerDay ?? ''}
+                  placeholder="e.g. 8"
+                  onChange={(e) => update('overtimeThresholdHoursPerDay', e.target.value === '' ? null : Number(e.target.value))}
                 />
-                <span className="text-sm text-slate-500 dark:text-slate-400">hrs @</span>
+              </Field>
+              <Field label="OT threshold — hours/week">
                 <Input
                   type="number"
-                  step="0.01"
-                  min="1"
-                  className="w-20"
-                  value={tier.multiplier}
-                  onChange={(e) => {
-                    const tiers = [...form.overtimeTiers];
-                    tiers[i] = { ...tiers[i], multiplier: Number(e.target.value) };
-                    update('overtimeTiers', tiers);
-                  }}
+                  step="0.25"
+                  min="0"
+                  value={form.overtimeThresholdHoursPerWeek ?? ''}
+                  placeholder="e.g. 38"
+                  onChange={(e) => update('overtimeThresholdHoursPerWeek', e.target.value === '' ? null : Number(e.target.value))}
                 />
-                <span className="text-sm text-slate-500 dark:text-slate-400">x</span>
-                {form.overtimeTiers.length > 1 && (
-                  <button
-                    type="button"
-                    className="text-xs text-red-500 dark:text-red-400"
-                    onClick={() => update('overtimeTiers', form.overtimeTiers.filter((_, idx) => idx !== i))}
-                  >
-                    remove
-                  </button>
-                )}
+              </Field>
+            </div>
+
+            <Field label="Overtime tiers">
+              <div className="space-y-2">
+                {form.overtimeTiers.map((tier, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="w-14 text-sm text-slate-500 dark:text-slate-400">Tier {i + 1}:</span>
+                    <Input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      className="w-24"
+                      disabled={!Number.isFinite(tier.hoursInTier) && i === form.overtimeTiers.length - 1}
+                      value={Number.isFinite(tier.hoursInTier) ? tier.hoursInTier : ''}
+                      placeholder={Number.isFinite(tier.hoursInTier) ? undefined : 'remaining'}
+                      onChange={(e) => {
+                        const tiers = [...form.overtimeTiers];
+                        tiers[i] = { ...tiers[i], hoursInTier: e.target.value === '' ? Infinity : Number(e.target.value) };
+                        update('overtimeTiers', tiers);
+                      }}
+                    />
+                    <span className="text-sm text-slate-500 dark:text-slate-400">hrs @</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="1"
+                      className="w-20"
+                      value={tier.multiplier}
+                      onChange={(e) => {
+                        const tiers = [...form.overtimeTiers];
+                        tiers[i] = { ...tiers[i], multiplier: Number(e.target.value) };
+                        update('overtimeTiers', tiers);
+                      }}
+                    />
+                    <span className="text-sm text-slate-500 dark:text-slate-400">x</span>
+                    {form.overtimeTiers.length > 1 && (
+                      <button
+                        type="button"
+                        className="text-xs text-red-500 dark:text-red-400"
+                        onClick={() => update('overtimeTiers', form.overtimeTiers.filter((_, idx) => idx !== i))}
+                      >
+                        remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+                  onClick={() =>
+                    update('overtimeTiers', [
+                      ...form.overtimeTiers.slice(0, -1),
+                      { hoursInTier: 2, multiplier: 1.5 },
+                      form.overtimeTiers[form.overtimeTiers.length - 1] ?? { hoursInTier: Infinity, multiplier: 2 },
+                    ])
+                  }
+                >
+                  <Plus className="h-3 w-3" /> Add tier
+                </button>
               </div>
-            ))}
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
-              onClick={() =>
-                update('overtimeTiers', [
-                  ...form.overtimeTiers.slice(0, -1),
-                  { hoursInTier: 2, multiplier: 1.5 },
-                  form.overtimeTiers[form.overtimeTiers.length - 1] ?? { hoursInTier: Infinity, multiplier: 2 },
-                ])
-              }
-            >
-              <Plus className="h-3 w-3" /> Add tier
-            </button>
-          </div>
-        </Field>
-      </CollapsibleSection>
+            </Field>
+          </CollapsibleSection>
 
-      {/* Superannuation — collapsed by default */}
-      <CollapsibleSection
-        icon={<PiggyBank className="h-4 w-4" />}
-        title="Superannuation"
-        open={showSuper}
-        onToggle={() => setShowSuper((v) => !v)}
-      >
-        <Checkbox
-          label="Include superannuation"
-          checked={form.includeSuper}
-          onChange={(e) => update('includeSuper', e.target.checked)}
-        />
-        {form.includeSuper && (
-          <Field label="Super rate (%)">
-            <Input
-              type="number"
-              step="0.1"
-              min="0"
-              className="w-28"
-              value={form.superRatePercent}
-              onChange={(e) => update('superRatePercent', Number(e.target.value))}
+          {/* Superannuation — collapsed by default */}
+          <CollapsibleSection
+            icon={<PiggyBank className="h-4 w-4" />}
+            title="Superannuation"
+            open={showSuper}
+            onToggle={() => setShowSuper((v) => !v)}
+          >
+            <Checkbox
+              label="Include superannuation"
+              checked={form.includeSuper}
+              onChange={(e) => update('includeSuper', e.target.checked)}
             />
-          </Field>
-        )}
-      </CollapsibleSection>
+            {form.includeSuper && (
+              <Field label="Super rate (%)">
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  className="w-28"
+                  value={form.superRatePercent}
+                  onChange={(e) => update('superRatePercent', Number(e.target.value))}
+                />
+              </Field>
+            )}
+          </CollapsibleSection>
 
-      {job && (
-        <Checkbox
-          label="Archived (hide from new-shift picker)"
-          checked={form.archived}
-          onChange={(e) => update('archived', e.target.checked)}
-        />
+          {job && (
+            <Checkbox
+              label="Archived (hide from new-shift picker)"
+              checked={form.archived}
+              onChange={(e) => update('archived', e.target.checked)}
+            />
+          )}
+        </>
       )}
 
       <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-700">
@@ -479,6 +491,55 @@ function RatePreview({ job, computedNightRate }: { job: Job; computedNightRate: 
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+const KIND_OPTIONS: { kind: JobKind; title: string; subtitle: string; Icon: typeof Clock }[] = [
+  { kind: 'hourly', title: 'Hourly job', subtitle: 'Pay worked out from shift times and rates', Icon: Clock },
+  { kind: 'abn', title: 'ABN / gig work', subtitle: 'Enter what you earned each day, e.g. Uber', Icon: Bike },
+];
+
+/** Choose between an hourly job and ABN/gig work; fixed once a job exists, since its entries depend on it. */
+function JobKindPicker({ value, locked, onChange }: { value: JobKind; locked: boolean; onChange: (kind: JobKind) => void }) {
+  return (
+    <div>
+      <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Job type</span>
+      <div className="grid grid-cols-2 gap-2">
+        {KIND_OPTIONS.map(({ kind, title, subtitle, Icon }) => {
+          const selected = value === kind;
+          return (
+            <button
+              key={kind}
+              type="button"
+              disabled={locked && !selected}
+              onClick={() => onChange(kind)}
+              className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${
+                selected
+                  ? 'border-brand-600 bg-brand-50 dark:border-brand-500 dark:bg-brand-500/10'
+                  : 'border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600'
+              }`}
+            >
+              <Icon className={`h-5 w-5 ${selected ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`} />
+              <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</span>
+            </button>
+          );
+        })}
+      </div>
+      {locked && <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">The job type can't be changed after the job is created.</p>}
+    </div>
+  );
+}
+
+function AbnNote() {
+  return (
+    <div className="flex gap-3 rounded-lg border border-violet-200 bg-violet-50/60 p-3 text-sm text-violet-900 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200">
+      <Receipt className="mt-0.5 h-4 w-4 shrink-0" />
+      <p>
+        ABN income is taxable, but no tax is taken out when you're paid. Shiftly keeps it separate from your wages and
+        cash, and shows how much to set aside for tax time. It doesn't earn super.
+      </p>
     </div>
   );
 }

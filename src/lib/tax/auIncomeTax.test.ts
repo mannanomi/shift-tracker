@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateAnnualTax, estimateNetForPeriod, helpRepayment } from './auIncomeTax';
+import { estimateAbnSetAside, estimateAnnualTax, estimateNetForPeriod, helpRepayment } from './auIncomeTax';
 
 describe('estimateAnnualTax', () => {
   it('charges no tax below the tax-free threshold', () => {
@@ -62,5 +62,21 @@ describe('helpRepayment', () => {
     const withHelp = estimateAnnualTax(90_000, { helpDebt: true });
     expect(without.helpRepayment).toBe(0);
     expect(withHelp.totalTax - without.totalTax).toBeCloseTo(3_450);
+  });
+});
+
+describe('estimateAbnSetAside', () => {
+  it('is nothing when there is no ABN income', () => {
+    expect(estimateAbnSetAside(2_000, 0, 26)).toBe(0);
+  });
+
+  it('is the extra tax ABN income adds on top of wages, per period', () => {
+    // Wages $1,500/fortnight = $39,000/yr; ABN $500/fortnight takes the year to $52,000.
+    const setAside = estimateAbnSetAside(1_500, 500, 26);
+    const expected = (estimateAnnualTax(52_000).totalTax - estimateAnnualTax(39_000).totalTax) / 26;
+    expect(setAside).toBeCloseTo(expected);
+    // Mostly at the 30% bracket plus 2% Medicare, less the shrinking LITO.
+    expect(setAside).toBeGreaterThan(500 * 0.16);
+    expect(setAside).toBeLessThan(500 * 0.4);
   });
 });

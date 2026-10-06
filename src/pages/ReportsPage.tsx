@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { addDays, addWeeks } from 'date-fns';
-import { Banknote, BarChart3, ChevronLeft, ChevronRight, Download, FileText, Inbox, Wallet } from 'lucide-react';
+import { Banknote, Receipt, BarChart3, ChevronLeft, ChevronRight, Download, FileText, Inbox, Wallet } from 'lucide-react';
 import { useJobs, usePublicHolidays, useSettings, useShifts } from '../hooks/useData';
 import { buildRangeReport } from '../lib/payCalculation/reports';
 import {
@@ -14,7 +14,7 @@ import {
 import { formatCurrency, formatHours } from '../lib/format';
 import { CountUp, Money } from '../components/ui/Money';
 import { downloadCsv, shiftsToCsv } from '../lib/csvExport';
-import { estimateNetForPeriod } from '../lib/tax/auIncomeTax';
+import { estimateAbnSetAside, estimateNetForPeriod } from '../lib/tax/auIncomeTax';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -112,9 +112,14 @@ export function ReportsPage() {
   if (!report || !range || !settings || !yearReport || !fyReport) return null;
 
   const helpDebt = Boolean(settings.hasHelpDebt);
-  const hasCashJob = (jobs ?? []).some((j) => !j.taxable);
-  const taxableJobs = report.jobSubtotals.filter((j) => j.taxable);
-  const cashJobs = report.jobSubtotals.filter((j) => !j.taxable);
+  const hasCashJob = (jobs ?? []).some((j) => j.kind !== 'abn' && !j.taxable);
+  const hasAbnJob = (jobs ?? []).some((j) => j.kind === 'abn');
+  const summaryCards = 1 + Number(hasCashJob) + Number(hasAbnJob);
+  const periodsPerYear = period === 'weekly' ? 52 : 26;
+  const taxableJobs = report.jobSubtotals.filter((j) => j.category === 'payg');
+  const cashJobs = report.jobSubtotals.filter((j) => j.category === 'cash');
+  const abnJobs = report.jobSubtotals.filter((j) => j.category === 'abn');
+  const abnHours = abnJobs.reduce((sum, j) => sum + j.hours, 0);
   const taxableHours = taxableJobs.reduce((sum, j) => sum + j.hours, 0);
   const cashHours = cashJobs.reduce((sum, j) => sum + j.hours, 0);
   const shiftCount = report.shiftLines.length;
@@ -171,7 +176,7 @@ export function ReportsPage() {
         </Button>
       </div>
 
-      <div className={`grid gap-4 lg:gap-6 lg:*:h-full ${hasCashJob ? 'lg:grid-cols-2' : ''}`}>
+      <div className={`grid gap-4 lg:gap-6 lg:*:h-full ${summaryCards === 3 ? 'lg:grid-cols-3' : summaryCards === 2 ? 'lg:grid-cols-2' : ''}`}>
         <Card>
           <div className="flex items-start justify-between gap-2">
             <Button variant="ghost" className="mt-1 shrink-0 print:invisible" icon={<ChevronLeft className="h-4 w-4" />} onClick={() => shiftPeriod(-1)}>
@@ -227,10 +232,37 @@ export function ReportsPage() {
             </div>
           </Card>
         )}
+
+        {hasAbnJob && (
+          <Card className="border-violet-200 bg-violet-50/40 dark:border-violet-800/50 dark:bg-violet-500/5">
+            <div className="text-center">
+              <p className="flex items-center justify-center gap-1 text-xs font-medium uppercase tracking-wide text-violet-600 dark:text-violet-300">
+                <Receipt className="h-3 w-3" /> ABN income, no tax withheld
+              </p>
+              <p className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                <Money amount={report.abnGrossPay} animate />
+              </p>
+              <p className="text-sm font-medium text-violet-700 dark:text-violet-300">
+                Set aside ≈ {formatCurrency(estimateAbnSetAside(report.taxableGrossPay, report.abnGrossPay, periodsPerYear, { helpDebt }))} for tax
+              </p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">{abnHours > 0 ? formatHours(abnHours) : 'Hours not recorded'}</p>
+            </div>
+            <div className="mt-3 space-y-1.5">
+              {abnJobs.map((job) => (
+                <div key={job.jobId} className="flex items-center justify-between text-sm">
+                  <Badge color={job.color}>{job.jobName}</Badge>
+                  <span className="font-medium tabular-nums text-slate-800 dark:text-slate-200">{formatCurrency(job.grossPay)}</span>
+                </div>
+              ))}
+              {abnJobs.length === 0 && <p className="text-center text-sm text-slate-400 dark:text-slate-500">No ABN earnings in this period.</p>}
+            </div>
+          </Card>
+        )}
       </div>
       <p className="text-xs text-slate-400 dark:text-slate-500">
         After-tax figures are an estimate (AU resident rates + Medicare levy{helpDebt ? ' + HECS/HELP' : ''}, annualized from
         this period's earnings). Cash income is kept separate and not taxed here.
+        {hasAbnJob && ' ABN income has no tax taken out; set aside is the extra tax it adds on top of your wages.'}
       </p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-6">
@@ -298,7 +330,7 @@ export function ReportsPage() {
                 <span className="min-w-0 truncate">
                   <Badge color={job.color}>
                     {job.name}
-                    {!job.taxable && ' (cash)'}
+                    {job.kind === 'abn' ? ' (ABN)' : !job.taxable && ' (cash)'}
                   </Badge>
                 </span>
                 <span className="text-right font-medium tabular-nums text-slate-800 sm:order-last dark:text-slate-200">
@@ -308,7 +340,11 @@ export function ReportsPage() {
                   {parseDateOnly(shift.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
                 </span>
                 <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
-                  {shift.startTime}–{shift.endTime}
+                  {job.kind === 'abn'
+                    ? breakdown.workedHours > 0
+                      ? `${formatHours(breakdown.workedHours)} worked`
+                      : 'Daily earnings'
+                    : `${shift.startTime}–${shift.endTime}`}
                 </span>
               </div>
             ))}

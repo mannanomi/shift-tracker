@@ -90,23 +90,50 @@ export function ShiftForm({
     [allShifts, form.jobId],
   );
 
+  const selectedJob = jobs?.find((j) => j.id === form.jobId);
+  const isAbn = selectedJob?.kind === 'abn';
+
+  /** Switching jobs keeps what's entered; an ABN entry has no times, so give an hourly job defaults. */
+  function selectJob(jobId: string) {
+    setForm((prev) => ({ ...prev, jobId, ...(prev.startTime === '' ? { startTime: '09:00', endTime: '17:00' } : {}) }));
+  }
+
+  /** ABN entries keep only the amount (and optional hours); hourly shifts drop those fields. */
+  function toRecord(): Shift {
+    if (isAbn) {
+      return {
+        ...form,
+        startTime: '',
+        endTime: '',
+        unpaidBreakMinutes: 0,
+        isPublicHolidayOverride: null,
+        earnings: Math.round((form.earnings ?? 0) * 100) / 100,
+        hoursWorked: form.hoursWorked && form.hoursWorked > 0 ? form.hoursWorked : undefined,
+      };
+    }
+    const { earnings: _earnings, hoursWorked: _hours, ...hourly } = form;
+    return hourly;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    await shiftsRepo.put(form);
+    const record = toRecord();
+    await shiftsRepo.put(record);
     let extra = 0;
-    if (!shift && repeat !== 'none') {
+    if (!shift && !isAbn && repeat !== 'none') {
       const step = repeat === 'weekly' ? 7 : 14;
       for (let i = 1; i <= repeatCount; i++) {
         await shiftsRepo.put({
-          ...form,
+          ...record,
           id: crypto.randomUUID(),
-          date: formatDateOnly(addDays(parseDateOnly(form.date), step * i)),
+          date: formatDateOnly(addDays(parseDateOnly(record.date), step * i)),
         });
         extra++;
       }
     }
     haptic();
-    toast(extra > 0 ? `Saved ${extra + 1} shifts` : shift ? 'Shift updated' : 'Shift added');
+    if (isAbn) toast(shift ? 'Earnings updated' : `${selectedJob?.name ?? 'ABN'} earnings added`);
+    else toast(extra > 0 ? `Saved ${extra + 1} shifts` : shift ? 'Shift updated' : 'Shift added');
     onDone();
   }
 
@@ -125,7 +152,7 @@ export function ShiftForm({
               <button
                 key={job.id}
                 type="button"
-                onClick={() => update('jobId', job.id)}
+                onClick={() => selectJob(job.id)}
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
                   selected
                     ? 'border-transparent text-white'
@@ -148,66 +175,103 @@ export function ShiftForm({
         <Input type="date" required value={form.date} onChange={(e) => update('date', e.target.value)} />
       </Field>
 
-      {timePresets.length > 0 && (
-        <div>
-          <span className="mb-1 flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-300">
-            <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" /> Recent times
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {timePresets.map((preset) => {
-              const selected = form.startTime === preset.startTime && form.endTime === preset.endTime;
-              return (
-                <button
-                  key={`${preset.startTime}-${preset.endTime}`}
-                  type="button"
-                  onClick={() => applyTimePreset(preset.startTime, preset.endTime)}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                    selected
-                      ? 'border-brand-600 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-500/10 dark:text-brand-400'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:text-slate-300 dark:hover:border-slate-500'
-                  }`}
-                >
-                  {formatTimeLabel(preset.startTime)}–{formatTimeLabel(preset.endTime)}
-                </button>
-              );
-            })}
+      {isAbn ? (
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Amount earned ($)">
+              <Input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0.01"
+                required
+                autoFocus={!shift}
+                value={form.earnings ?? ''}
+                onChange={(e) => update('earnings', e.target.value === '' ? undefined : Number(e.target.value))}
+                placeholder="0.00"
+              />
+            </Field>
+            <Field label="Hours worked (optional)">
+              <Input
+                type="number"
+                inputMode="decimal"
+                step="0.25"
+                min="0"
+                value={form.hoursWorked ?? ''}
+                onChange={(e) => update('hoursWorked', e.target.value === '' ? undefined : Number(e.target.value))}
+                placeholder="e.g. 4.5"
+              />
+            </Field>
           </div>
-        </div>
+          <p className="-mt-2 text-xs text-slate-400 dark:text-slate-500">
+            Your total for the day, including tips, as shown in your {selectedJob?.name ?? 'app'} earnings. Hours let Shiftly
+            work out your $/hr.
+          </p>
+        </>
+      ) : (
+        <>
+          {timePresets.length > 0 && (
+            <div>
+              <span className="mb-1 flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+                <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" /> Recent times
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {timePresets.map((preset) => {
+                  const selected = form.startTime === preset.startTime && form.endTime === preset.endTime;
+                  return (
+                    <button
+                      key={`${preset.startTime}-${preset.endTime}`}
+                      type="button"
+                      onClick={() => applyTimePreset(preset.startTime, preset.endTime)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        selected
+                          ? 'border-brand-600 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-500/10 dark:text-brand-400'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:text-slate-300 dark:hover:border-slate-500'
+                      }`}
+                    >
+                      {formatTimeLabel(preset.startTime)}–{formatTimeLabel(preset.endTime)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Start time">
+              <Input type="time" required value={form.startTime} onChange={(e) => update('startTime', e.target.value)} />
+            </Field>
+            <Field label="End time">
+              <Input type="time" required value={form.endTime} onChange={(e) => update('endTime', e.target.value)} />
+            </Field>
+          </div>
+
+          <Field label="Unpaid break (minutes)">
+            <Input
+              type="number"
+              min="0"
+              step="5"
+              value={form.unpaidBreakMinutes}
+              onChange={(e) => update('unpaidBreakMinutes', Number(e.target.value))}
+            />
+          </Field>
+
+          <Field label="Public holiday">
+            <Select
+              value={form.isPublicHolidayOverride === null ? 'auto' : form.isPublicHolidayOverride ? 'yes' : 'no'}
+              onChange={(e) =>
+                update('isPublicHolidayOverride', e.target.value === 'auto' ? null : e.target.value === 'yes')
+              }
+            >
+              <option value="auto">Auto-detect from holiday list</option>
+              <option value="yes">Force: is a public holiday</option>
+              <option value="no">Force: is NOT a public holiday</option>
+            </Select>
+          </Field>
+        </>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Start time">
-          <Input type="time" required value={form.startTime} onChange={(e) => update('startTime', e.target.value)} />
-        </Field>
-        <Field label="End time">
-          <Input type="time" required value={form.endTime} onChange={(e) => update('endTime', e.target.value)} />
-        </Field>
-      </div>
-
-      <Field label="Unpaid break (minutes)">
-        <Input
-          type="number"
-          min="0"
-          step="5"
-          value={form.unpaidBreakMinutes}
-          onChange={(e) => update('unpaidBreakMinutes', Number(e.target.value))}
-        />
-      </Field>
-
-      <Field label="Public holiday">
-        <Select
-          value={form.isPublicHolidayOverride === null ? 'auto' : form.isPublicHolidayOverride ? 'yes' : 'no'}
-          onChange={(e) =>
-            update('isPublicHolidayOverride', e.target.value === 'auto' ? null : e.target.value === 'yes')
-          }
-        >
-          <option value="auto">Auto-detect from holiday list</option>
-          <option value="yes">Force: is a public holiday</option>
-          <option value="no">Force: is NOT a public holiday</option>
-        </Select>
-      </Field>
-
-      {!shift && (
+      {!shift && !isAbn && (
         <div>
           <span className="mb-1 flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-300">
             <Repeat className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" /> Repeat
@@ -245,7 +309,7 @@ export function ShiftForm({
           Cancel
         </Button>
         <Button type="submit" icon={<Check className="h-4 w-4" />}>
-          Save shift
+          {isAbn ? 'Save earnings' : 'Save shift'}
         </Button>
       </div>
     </form>

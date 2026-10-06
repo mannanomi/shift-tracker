@@ -33,6 +33,7 @@ export function ShiftLineCard({
   index?: number;
 }) {
   const swipe = useSwipe({ onSwipeLeft: onDelete, onSwipeRight: onCopy });
+  const isAbn = job.kind === 'abn';
 
   return (
     <div className="relative overflow-hidden rounded-2xl">
@@ -74,10 +75,16 @@ export function ShiftLineCard({
             <span className="text-sm text-slate-700 dark:text-slate-300">
               {parseDateOnly(shift.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
             </span>
-            <span className="text-xs text-slate-400 dark:text-slate-500">
-              {shift.startTime}–{shift.endTime}
-            </span>
-            {breakdown.dayType !== 'weekday' && (
+            {isAbn ? (
+              <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
+                ABN
+              </span>
+            ) : (
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                {shift.startTime}–{shift.endTime}
+              </span>
+            )}
+            {!isAbn && breakdown.dayType !== 'weekday' && (
               <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
                 {breakdown.dayType === 'publicHoliday' ? 'Public holiday' : breakdown.dayType}
               </span>
@@ -89,7 +96,8 @@ export function ShiftLineCard({
             )}
           </div>
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            {formatHours(breakdown.workedHours)} worked{shift.notes && ` · ${shift.notes}`}
+            {isAbn && breakdown.workedHours === 0 ? 'Daily earnings' : `${formatHours(breakdown.workedHours)} worked`}
+            {shift.notes && ` · ${shift.notes}`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -105,7 +113,7 @@ export function ShiftLineCard({
 
       {expanded && (
         <>
-          <ShiftBreakdown breakdown={breakdown} />
+          <ShiftBreakdown breakdown={breakdown} abn={isAbn} />
           <div className="mt-3 flex justify-end gap-1">
             <Button variant="ghost" icon={<Copy className="h-3.5 w-3.5" />} onClick={onCopy}>
               Copy

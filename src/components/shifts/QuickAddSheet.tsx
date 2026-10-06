@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { addDays } from 'date-fns';
-import { Plus, SlidersHorizontal, Zap } from 'lucide-react';
+import { Plus, Receipt, SlidersHorizontal, Zap } from 'lucide-react';
 import type { Job, Shift } from '../../types';
 import { useActiveJobs, useShifts } from '../../hooks/useData';
 import { shiftsRepo } from '../../db/repository';
@@ -33,7 +33,7 @@ function recentTemplates(shifts: Shift[], jobs: Job[]): Template[] {
   const out: Template[] = [];
   for (const s of sorted) {
     const job = jobsById.get(s.jobId);
-    if (!job) continue;
+    if (!job || job.kind === 'abn') continue;
     const key = `${s.jobId}|${s.startTime}|${s.endTime}|${s.unpaidBreakMinutes}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -44,7 +44,14 @@ function recentTemplates(shifts: Shift[], jobs: Job[]): Template[] {
 }
 
 /** One-tap logging of a shift you've worked before. */
-export function QuickAddSheet({ onClose, onMoreOptions }: { onClose: () => void; onMoreOptions: (date: string) => void }) {
+export function QuickAddSheet({
+  onClose,
+  onMoreOptions,
+}: {
+  onClose: () => void;
+  /** Opens the full form for this date, preselecting a job when given (used for ABN earnings). */
+  onMoreOptions: (date: string, jobId?: string) => void;
+}) {
   const jobs = useActiveJobs();
   const shifts = useShifts();
   const today = new Date();
@@ -55,6 +62,7 @@ export function QuickAddSheet({ onClose, onMoreOptions }: { onClose: () => void;
   ];
   const [date, setDate] = useState(dayOptions[1].date);
   const templates = useMemo(() => (jobs && shifts ? recentTemplates(shifts, jobs) : []), [jobs, shifts]);
+  const abnJobs = (jobs ?? []).filter((j) => j.kind === 'abn');
 
   async function add(t: Template) {
     const shift: Shift = {
@@ -91,7 +99,27 @@ export function QuickAddSheet({ onClose, onMoreOptions }: { onClose: () => void;
         ))}
       </div>
 
-      {templates.length === 0 ? (
+      {abnJobs.length > 0 && (
+        <div className="mb-3 space-y-2">
+          {abnJobs.map((job, index) => (
+            <button
+              key={job.id}
+              onClick={() => onMoreOptions(date, job.id)}
+              style={{ animationDelay: `${60 + index * 50}ms` }}
+              className="animate-pop-in flex w-full items-center gap-3 rounded-2xl border border-violet-200 bg-violet-50/60 p-3 text-left transition duration-150 hover:-translate-y-0.5 hover:border-violet-300 active:scale-[0.98] dark:border-violet-500/30 dark:bg-violet-500/10 dark:hover:border-violet-500/50"
+            >
+              <span className="h-9 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: job.color }} />
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium text-slate-900 dark:text-slate-100">{job.name}</span>
+                <span className="block text-sm text-violet-700 dark:text-violet-300">Enter earnings for this day</span>
+              </span>
+              <Receipt className="h-5 w-5 shrink-0 text-violet-500" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {templates.length === 0 && abnJobs.length > 0 ? null : templates.length === 0 ? (
         <EmptyState
           icon={<Zap className="h-5 w-5" />}
           title="No recent shifts yet"

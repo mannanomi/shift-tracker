@@ -118,3 +118,20 @@ export function estimateNetForPeriod(
     annual,
   };
 }
+
+/**
+ * How much to put aside for tax on ABN income in one period. Nothing is withheld from ABN
+ * income, so this is the extra tax it adds on top of wages: tax on (wages + ABN) minus tax on
+ * wages alone, both annualized the same way as estimateNetForPeriod.
+ */
+export function estimateAbnSetAside(
+  paygGross: number,
+  abnGross: number,
+  periodsPerYear: number,
+  options: TaxOptions = {},
+): number {
+  if (abnGross <= 0) return 0;
+  const withAbn = estimateAnnualTax((paygGross + abnGross) * periodsPerYear, options).totalTax;
+  const wagesOnly = estimateAnnualTax(paygGross * periodsPerYear, options).totalTax;
+  return Math.max(0, (withAbn - wagesOnly) / periodsPerYear);
+}

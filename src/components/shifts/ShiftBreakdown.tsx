@@ -10,7 +10,17 @@ const DAY_TYPE_LABEL: Record<ShiftWeeklyBreakdown['dayType'], string> = {
 
 const RATE_LABEL_TEXT: Record<RateLabel, string> = { morning: 'day', night: 'night' };
 
-export function ShiftBreakdown({ breakdown }: { breakdown: ShiftWeeklyBreakdown }) {
+export function ShiftBreakdown({ breakdown, abn = false }: { breakdown: ShiftWeeklyBreakdown; abn?: boolean }) {
+  if (abn) {
+    return (
+      <div className="mt-3 space-y-2 rounded-lg bg-violet-50/60 p-3 text-sm dark:bg-violet-500/10">
+        <Row label="Earned (ABN)">{formatCurrency(breakdown.finalGrossPay)}</Row>
+        <Row label="Hours worked">{breakdown.workedHours > 0 ? formatHours(breakdown.workedHours) : 'Not recorded'}</Row>
+        {breakdown.workedHours > 0 && <Row label="Per hour">{formatCurrency(breakdown.loadedHourlyRate)}/hr</Row>}
+        <p className="text-xs text-slate-500 dark:text-slate-400">No tax was taken out of this. Set some aside for tax time.</p>
+      </div>
+    );
+  }
   const allRateLabels = new Set([
     ...breakdown.finalRegularSegments.map((s) => s.rateLabel),
     ...breakdown.overtimeSegments.map((s) => s.rateLabel),

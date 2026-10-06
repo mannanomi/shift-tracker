@@ -16,7 +16,7 @@ function isPublicHoliday(shift: Shift, publicHolidays: PublicHoliday[]): boolean
   return publicHolidays.some((ph) => ph.date === shift.date);
 }
 
-function determineDayType(shift: Shift, publicHolidays: PublicHoliday[]): DayType {
+export function determineDayType(shift: Shift, publicHolidays: PublicHoliday[]): DayType {
   if (isPublicHoliday(shift, publicHolidays)) return 'publicHoliday';
   if (isSunday(shift.date)) return 'sunday';
   if (isSaturday(shift.date)) return 'saturday';

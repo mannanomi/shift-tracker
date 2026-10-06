@@ -53,7 +53,12 @@ export function JobsPage() {
             <div className="flex items-start justify-between gap-2">
               <Badge color={job.color}>{job.name}</Badge>
               <div className="flex shrink-0 items-center gap-1.5">
-                {!job.taxable && (
+                {job.kind === 'abn' && (
+                  <span className="rounded-md bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
+                    ABN
+                  </span>
+                )}
+                {job.kind !== 'abn' && !job.taxable && (
                   <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
                     Cash
                   </span>
@@ -66,22 +71,31 @@ export function JobsPage() {
               </div>
             </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <RateTile label="Day rate" value={`$${job.morningRate.toFixed(2)}`} hint="Standard hours" />
-              <RateTile
-                label="Night rate"
-                value={`$${job.nightRate.toFixed(2)}`}
-                hint={job.nightRateEndsAt ? `${job.nightRateStartsAt} – ${job.nightRateEndsAt}` : `From ${job.nightRateStartsAt}`}
-              />
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <LoadingChip label="Sat" value={`+${Math.round((job.saturdayMultiplier - 1) * 100)}%`} />
-              <LoadingChip label="Sun" value={`+${Math.round((job.sundayMultiplier - 1) * 100)}%`} />
-              <LoadingChip label="PH" value={`+${Math.round((job.publicHolidayMultiplier - 1) * 100)}%`} />
-              {job.casualLoadingPercent > 0 && <LoadingChip label="Casual" value={`${job.casualLoadingPercent}%`} />}
-              {job.includeSuper && <LoadingChip label="Super" value={`${job.superRatePercent}%`} />}
-            </div>
+            {job.kind === 'abn' ? (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <RateTile label="Paid as" value="Daily earnings" hint="You enter each day's total" />
+                <RateTile label="Tax" value="Not withheld" hint="Set aside shown on Dashboard" />
+              </div>
+            ) : (
+              <>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <RateTile label="Day rate" value={`$${job.morningRate.toFixed(2)}`} hint="Standard hours" />
+                  <RateTile
+                    label="Night rate"
+                    value={`$${job.nightRate.toFixed(2)}`}
+                    hint={job.nightRateEndsAt ? `${job.nightRateStartsAt} – ${job.nightRateEndsAt}` : `From ${job.nightRateStartsAt}`}
+                  />
+                </div>
+    
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <LoadingChip label="Sat" value={`+${Math.round((job.saturdayMultiplier - 1) * 100)}%`} />
+                  <LoadingChip label="Sun" value={`+${Math.round((job.sundayMultiplier - 1) * 100)}%`} />
+                  <LoadingChip label="PH" value={`+${Math.round((job.publicHolidayMultiplier - 1) * 100)}%`} />
+                  {job.casualLoadingPercent > 0 && <LoadingChip label="Casual" value={`${job.casualLoadingPercent}%`} />}
+                  {job.includeSuper && <LoadingChip label="Super" value={`${job.superRatePercent}%`} />}
+                </div>
+              </>
+            )}
 
             <div className="mt-auto pt-4">
               <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 dark:border-slate-700">
@@ -115,12 +129,13 @@ export function JobsPage() {
 }
 
 function RateTile({ label, value, hint }: { label: string; value: string; hint: string }) {
+  const isRate = value.startsWith('$');
   return (
     <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/40">
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-0.5 text-lg font-bold tabular-nums tracking-tight text-slate-900 dark:text-slate-100">
+      <p className="mt-0.5 truncate text-lg font-bold tabular-nums tracking-tight text-slate-900 dark:text-slate-100">
         {value}
-        <span className="text-xs font-medium text-slate-400 dark:text-slate-500">/hr</span>
+        {isRate && <span className="text-xs font-medium text-slate-400 dark:text-slate-500">/hr</span>}
       </p>
       <p className="text-xs tabular-nums text-slate-400 dark:text-slate-500">{hint}</p>
     </div>
