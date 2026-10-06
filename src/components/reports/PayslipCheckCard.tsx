@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ReceiptText } from 'lucide-react';
-import type { AppSettings, Payslip } from '../../types';
+import { Building2, ReceiptText } from 'lucide-react';
+import type { AppSettings, Job } from '../../types';
 import type { RangeReport } from '../../lib/payCalculation/reports';
 import { settingsRepo } from '../../db/repository';
 import { formatCurrency } from '../../lib/format';
+import { groupForPayslips, paidForGroup, roleName, withGroupPayment, type PayslipGroup } from '../../lib/payslip';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Input } from '../ui/Field';
@@ -20,22 +21,18 @@ function Difference({ paid, calculated }: { paid: number; calculated: number }) 
   );
 }
 
-/** Compare what each employer paid for this period against the calculated gross. */
-export function PayslipCheckCard({ report, settings }: { report: RangeReport; settings: AppSettings }) {
+/**
+ * Compare what each employer paid for this period against the calculated gross. Jobs with the
+ * same employer (e.g. "MSS - Restraint" and "MSS - Non Restraint") are checked against one payslip.
+ */
+export function PayslipCheckCard({ report, settings, jobs }: { report: RangeReport; settings: AppSettings; jobs: Job[] }) {
   const payslips = settings.payslips ?? [];
-  // ABN earnings are entered as paid, so there's no payslip to check them against.
-  const employerJobs = report.jobSubtotals.filter((j) => j.category !== 'abn');
-  const find = (jobId: string) =>
-    payslips.find((p) => p.jobId === jobId && p.periodStart === report.startDate && p.periodEnd === report.endDate);
+  const groups = groupForPayslips(report.jobSubtotals, jobs);
 
-  async function save(jobId: string, raw: string) {
-    const others = payslips.filter((p) => !(p.jobId === jobId && p.periodStart === report.startDate && p.periodEnd === report.endDate));
+  async function save(group: PayslipGroup, raw: string) {
     const amount = Number(raw);
-    const next: Payslip[] =
-      raw.trim() === '' || !(amount >= 0)
-        ? others
-        : [...others, { id: find(jobId)?.id ?? crypto.randomUUID(), jobId, periodStart: report.startDate, periodEnd: report.endDate, amountPaid: amount }];
-    await settingsRepo.put({ ...settings, payslips: next });
+    const value = raw.trim() === '' || !(amount >= 0) ? null : amount;
+    await settingsRepo.put({ ...settings, payslips: withGroupPayment(payslips, group, report.startDate, report.endDate, value) });
   }
 
   return (
@@ -43,28 +40,55 @@ export function PayslipCheckCard({ report, settings }: { report: RangeReport; se
       <h2 className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
         <ReceiptText className="h-4 w-4" /> Payslip check
       </h2>
-      <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Enter the gross pay on your payslip for this period (before tax, excluding super).</p>
-      {employerJobs.length === 0 ? (
+      <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+        Enter the gross pay on each payslip for this period (before tax, excluding super). Jobs with the same employer share
+        one payslip.
+      </p>
+      {groups.length === 0 ? (
         <p className="py-4 text-center text-sm text-slate-400 dark:text-slate-500">No shifts in this period.</p>
       ) : (
-        <div className="mt-3 space-y-3">
-          {employerJobs.map((job) => {
-            const saved = find(job.jobId);
+        <div className="mt-3 divide-y divide-slate-100 dark:divide-slate-700">
+          {groups.map((group) => {
+            const paid = paidForGroup(group, payslips, report.startDate, report.endDate);
             return (
-              <div key={`${job.jobId}|${report.startDate}|${report.endDate}`} className="grid grid-cols-[1fr_7.5rem] items-center gap-x-3 gap-y-0.5">
+              <div
+                key={`${group.key}|${report.startDate}|${report.endDate}`}
+                className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-center gap-x-3 py-2.5 first:pt-0 last:pb-0"
+              >
                 <div className="min-w-0">
-                  <Badge color={job.color}>{job.jobName}</Badge>
+                  {group.employer ? (
+                    <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                      <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      <span className="truncate">{group.label}</span>
+                    </p>
+                  ) : (
+                    <Badge color={group.color}>{group.label}</Badge>
+                  )}
                   <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-                    Calculated <span className="tabular-nums">{formatCurrency(job.grossPay)}</span>
-                    {saved && (
+                    Calculated <span className="tabular-nums">{formatCurrency(group.calculated)}</span>
+                    {paid !== null && (
                       <>
                         {' · '}
-                        <Difference paid={saved.amountPaid} calculated={job.grossPay} />
+                        <Difference paid={paid} calculated={group.calculated} />
                       </>
                     )}
                   </p>
+                  {group.employer && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {group.jobs.map((j) => (
+                        <span
+                          key={j.jobId}
+                          className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-700/60 dark:text-slate-300"
+                        >
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: j.color }} />
+                          <span className="truncate">{roleName(j.jobName, group.employer)}</span>
+                          <span className="tabular-nums text-slate-400 dark:text-slate-500">{formatCurrency(j.grossPay)}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <PaidInput initial={saved?.amountPaid} onSave={(v) => save(job.jobId, v)} />
+                <PaidInput initial={paid ?? undefined} onSave={(v) => save(group, v)} />
               </div>
             );
           })}

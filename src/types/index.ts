@@ -19,6 +19,11 @@ export interface Job {
   id: string;
   name: string;
   kind: JobKind;
+  /**
+   * Who pays this job. Jobs with the same employer share one payslip check. Optional: when
+   * blank, the part of the name before " - " is used (e.g. "MSS - Restraint" → "MSS").
+   */
+  employer?: string;
   /** Hex color used for badges/calendar chips. */
   color: string;
   archived: boolean;
@@ -126,7 +131,10 @@ export interface Goal {
 
 export interface Payslip {
   id: string;
+  /** The (first) job the payslip covers. Entries saved before employer grouping only have this. */
   jobId: string;
+  /** Which payslip group it belongs to: `employer:<name>` or `job:<id>` (see lib/payslip). */
+  groupKey?: string;
   periodStart: string;
   periodEnd: string;
   /** Gross amount the employer paid for this job over the period. */

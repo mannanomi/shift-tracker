@@ -2,6 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { Bike, Check, ChevronDown, Clock, DollarSign, PiggyBank, Plus, Receipt, Timer, Wallet } from 'lucide-react';
 import { createDefaultJob, normalizeJob, type Job, type JobKind } from '../../types';
 import { jobsRepo } from '../../db/repository';
+import { useJobs } from '../../hooks/useData';
+import { employerOf } from '../../lib/payslip';
 import { formatCurrency } from '../../lib/format';
 import { Button } from '../ui/Button';
 import { Checkbox, Field, Input } from '../ui/Field';
@@ -34,6 +36,9 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
     () => Boolean(job?.overtimeThresholdHoursPerDay || job?.overtimeThresholdHoursPerWeek),
   );
   const [showSuper, setShowSuper] = useState(() => Boolean(job?.includeSuper));
+  const allJobs = useJobs();
+  const knownEmployers = [...new Set((allJobs ?? []).map(employerOf).filter((e): e is string => Boolean(e)))].sort();
+  const impliedEmployer = employerOf({ name: form.name });
 
   function update<K extends keyof Job>(key: K, value: Job[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -69,6 +74,28 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
             placeholder={form.kind === 'abn' ? 'e.g. Uber Eats' : 'e.g. Coffee Club'}
           />
         </Field>
+
+        {form.kind === 'hourly' && (
+          <div>
+            <Field label="Employer (optional)">
+              <Input
+                list="known-employers"
+                value={form.employer ?? ''}
+                onChange={(e) => update('employer', e.target.value || undefined)}
+                placeholder={impliedEmployer ?? 'e.g. MSS'}
+              />
+            </Field>
+            <datalist id="known-employers">
+              {knownEmployers.map((e) => (
+                <option key={e} value={e} />
+              ))}
+            </datalist>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              Jobs with the same employer share one payslip check.
+              {!form.employer?.trim() && impliedEmployer && ` Using “${impliedEmployer}” from the job name.`}
+            </p>
+          </div>
+        )}
 
         <Field label="Badge color">
           <div className="flex gap-2">

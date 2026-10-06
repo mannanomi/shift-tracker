@@ -293,7 +293,7 @@ export function ReportsPage() {
 
       <div className="grid gap-4 lg:grid-cols-2 lg:gap-6 lg:*:h-full">
         <DayTypeBreakdown report={report} />
-        <PayslipCheckCard report={report} settings={settings} />
+        <PayslipCheckCard report={report} settings={settings} jobs={jobs ?? []} />
       </div>
 
       <EarningsHeatmap lines={yearReport.shiftLines} today={today} weekStartDay={settings.weekStartDay} />
