@@ -10,7 +10,9 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' so the app decides when to switch versions (src/lib/appUpdates.ts) instead of
+      // an open page silently staying on the old version until it's closed and reopened.
+      registerType: 'prompt',
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Shiftly',
