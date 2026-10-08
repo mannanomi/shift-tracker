@@ -4,7 +4,7 @@ A web app for tracking work shifts across multiple jobs and calculating Australi
 
 Local-first: it works fully offline with no account. Cloud sync is optional and off unless configured.
 
-Live: https://shift-tracker-nu.vercel.app
+Live: https://shiftly-au.vercel.app
 
 ## Features
 
