@@ -263,6 +263,18 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
               </p>
             </div>
 
+            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <Checkbox
+                label="Hours after midnight use the next day's rate"
+                checked={form.splitAtMidnight}
+                onChange={(e) => update('splitAtMidnight', e.target.checked)}
+              />
+              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                A Friday 6pm–6am shift earns the Saturday rate from 12am, and a Sunday night shift goes back to the weekday
+                rate at 12am. Turn off if this job pays the whole shift by the day it starts.
+              </p>
+            </div>
+
             <Field label="Casual loading (%)">
               <Input
                 type="number"

@@ -1,9 +1,14 @@
 export type DayType = 'publicHoliday' | 'sunday' | 'saturday' | 'weekday';
 export type RateLabel = 'morning' | 'night';
 
-/** A slice of regular (non-OT) hours paid at one rate — a shift only has >1 of these when it straddles the night-rate window's start/end. */
+/**
+ * A slice of regular (non-OT) hours paid at one rate. A shift has more than one when it
+ * straddles the night-rate window's start/end, or runs past midnight into a different day type.
+ */
 export interface RegularSegment {
   rateLabel: RateLabel;
+  /** The day these hours fall on (an overnight shift's hours after midnight use the next day). */
+  dayType: DayType;
   hours: number;
   /** $/hr for this segment (casual-loaded, day-multiplied — not including any OT multiplier). */
   rate: number;
@@ -14,6 +19,8 @@ export interface OvertimeSegment {
   tierIndex: number;
   /** Which base rate this OT segment's hours fall under — relevant when a night-rate window is configured. */
   rateLabel: RateLabel;
+  /** The day these hours fall on. */
+  dayType: DayType;
   hours: number;
   multiplier: number;
   /** The hourly rate this segment is paid at (the segment's loaded rate * multiplier). */
@@ -29,7 +36,10 @@ export interface ShiftDailyBreakdown {
   rateLabel: RateLabel;
   baseRate: number;
   casualLoadedRate: number;
+  /** The day the shift starts on — see dayTypes / the segments for hours after midnight. */
   dayType: DayType;
+  /** Every day type the shift's hours fall on, in order (two when it crosses into a different kind of day). */
+  dayTypes: DayType[];
   dayMultiplier: number;
   /** casualLoadedRate * dayMultiplier for the shift's starting rate — see regularSegments when the shift is split. */
   loadedHourlyRate: number;

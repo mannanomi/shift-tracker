@@ -1,4 +1,4 @@
-import type { RateLabel, ShiftWeeklyBreakdown } from '../../lib/payCalculation/types';
+import type { DayType, RateLabel, ShiftWeeklyBreakdown } from '../../lib/payCalculation/types';
 import { formatCurrency, formatHours } from '../../lib/format';
 
 const DAY_TYPE_LABEL: Record<ShiftWeeklyBreakdown['dayType'], string> = {
@@ -21,19 +21,21 @@ export function ShiftBreakdown({ breakdown, abn = false }: { breakdown: ShiftWee
       </div>
     );
   }
-  const allRateLabels = new Set([
-    ...breakdown.finalRegularSegments.map((s) => s.rateLabel),
-    ...breakdown.overtimeSegments.map((s) => s.rateLabel),
-    ...breakdown.weeklyOvertimeSegments.map((s) => s.rateLabel),
-  ]);
-  const isSplitShift = allRateLabels.size > 1;
+  const allSegments = [...breakdown.finalRegularSegments, ...breakdown.overtimeSegments, ...breakdown.weeklyOvertimeSegments];
+  const crossesDays = new Set(allSegments.map((s) => s.dayType)).size > 1;
+  const isSplitShift = new Set(allSegments.map((s) => s.rateLabel)).size > 1 || crossesDays;
+  /** "night", or "Saturday night" when the shift spans more than one kind of day. */
+  const sliceLabel = (seg: { rateLabel: RateLabel; dayType: DayType }) =>
+    crossesDays ? `${DAY_TYPE_LABEL[seg.dayType]} ${RATE_LABEL_TEXT[seg.rateLabel]}` : RATE_LABEL_TEXT[seg.rateLabel];
 
   return (
     <div className="mt-3 space-y-2 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-700/40">
       <Row label="Worked hours">{formatHours(breakdown.workedHours)}</Row>
       {isSplitShift ? (
         <p className="text-xs text-slate-400 dark:text-slate-500">
-          This shift crosses the night-rate window, so hours are split below by day/night rate.
+          {crossesDays
+            ? 'This shift runs past midnight into a different day, so hours after 12am are paid at that day’s rate (split below).'
+            : 'This shift crosses the night-rate window, so hours are split below by day/night rate.'}
         </p>
       ) : (
         <>
@@ -41,9 +43,13 @@ export function ShiftBreakdown({ breakdown, abn = false }: { breakdown: ShiftWee
           <Row label="After casual loading">{formatCurrency(breakdown.casualLoadedRate)}/hr</Row>
         </>
       )}
-      <Row label="Day type × multiplier">
-        {DAY_TYPE_LABEL[breakdown.dayType]} × {breakdown.dayMultiplier}
-      </Row>
+      {crossesDays ? (
+        <Row label="Days">{breakdown.dayTypes.map((d) => DAY_TYPE_LABEL[d]).join(' → ')}</Row>
+      ) : (
+        <Row label="Day type × multiplier">
+          {DAY_TYPE_LABEL[breakdown.dayType]} × {breakdown.dayMultiplier}
+        </Row>
+      )}
       {!isSplitShift && <Row label="Loaded hourly rate">{formatCurrency(breakdown.loadedHourlyRate)}/hr</Row>}
       <div className="border-t border-slate-200 pt-2 dark:border-slate-600">
         {breakdown.finalRegularSegments.map((seg, i) => (
@@ -51,7 +57,7 @@ export function ShiftBreakdown({ breakdown, abn = false }: { breakdown: ShiftWee
             key={`regular-${i}`}
             label={
               isSplitShift
-                ? `Regular hours – ${RATE_LABEL_TEXT[seg.rateLabel]} (${formatHours(seg.hours)} @ ${formatCurrency(seg.rate)}/hr)`
+                ? `Regular hours – ${sliceLabel(seg)} (${formatHours(seg.hours)} @ ${formatCurrency(seg.rate)}/hr)`
                 : `Regular hours (${formatHours(seg.hours)})`
             }
           >
@@ -61,7 +67,7 @@ export function ShiftBreakdown({ breakdown, abn = false }: { breakdown: ShiftWee
         {breakdown.overtimeSegments.map((seg, i) => (
           <Row
             key={`daily-${i}`}
-            label={`Daily OT tier ${seg.tierIndex + 1}${isSplitShift ? ` – ${RATE_LABEL_TEXT[seg.rateLabel]}` : ''} (${formatHours(seg.hours)} @ ${seg.multiplier}x)`}
+            label={`Daily OT tier ${seg.tierIndex + 1}${isSplitShift ? ` – ${sliceLabel(seg)}` : ''} (${formatHours(seg.hours)} @ ${seg.multiplier}x)`}
           >
             {formatCurrency(seg.pay)}
           </Row>
@@ -69,7 +75,7 @@ export function ShiftBreakdown({ breakdown, abn = false }: { breakdown: ShiftWee
         {breakdown.weeklyOvertimeSegments.map((seg, i) => (
           <Row
             key={`weekly-${i}`}
-            label={`Weekly OT tier ${seg.tierIndex + 1}${isSplitShift ? ` – ${RATE_LABEL_TEXT[seg.rateLabel]}` : ''} (${formatHours(seg.hours)} @ ${seg.multiplier}x)`}
+            label={`Weekly OT tier ${seg.tierIndex + 1}${isSplitShift ? ` – ${sliceLabel(seg)}` : ''} (${formatHours(seg.hours)} @ ${seg.multiplier}x)`}
           >
             {formatCurrency(seg.pay)}
           </Row>

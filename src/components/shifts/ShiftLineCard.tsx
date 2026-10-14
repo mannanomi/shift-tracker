@@ -89,11 +89,18 @@ export function ShiftLineCard({
                 {shift.startTime}–{shift.endTime}
               </span>
             )}
-            {!isAbn && breakdown.dayType !== 'weekday' && (
-              <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
-                {breakdown.dayType === 'publicHoliday' ? 'Public holiday' : breakdown.dayType}
-              </span>
-            )}
+            {!isAbn &&
+              breakdown.dayTypes
+                .filter((d) => d !== 'weekday')
+                .map((d) => (
+                  <span
+                    key={d}
+                    className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+                  >
+                    {DAY_TAG[d]}
+                    {d !== breakdown.dayType && ' after 12am'}
+                  </span>
+                ))}
             {breakdown.overtimeSegments.length + breakdown.weeklyOvertimeSegments.length > 0 && (
               <span className="rounded bg-purple-50 px-1.5 py-0.5 text-[11px] font-medium text-purple-700 dark:bg-purple-500/10 dark:text-purple-400">
                 OT
@@ -137,6 +144,8 @@ export function ShiftLineCard({
     </div>
   );
 }
+
+const DAY_TAG = { weekday: 'Weekday', saturday: 'Saturday', sunday: 'Sunday', publicHoliday: 'Public holiday' } as const;
 
 const SWIPE_THRESHOLD = 80;
 const SWIPE_MAX = 120;

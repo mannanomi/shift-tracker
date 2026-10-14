@@ -11,16 +11,18 @@ import type {
   WeekPayResult,
 } from './types';
 
-function isPublicHoliday(shift: Shift, publicHolidays: PublicHoliday[]): boolean {
-  if (shift.isPublicHolidayOverride !== null) return shift.isPublicHolidayOverride;
-  return publicHolidays.some((ph) => ph.date === shift.date);
+/** Day type of a calendar date; `override` (a shift's public holiday setting) wins over the list when set. */
+function dayTypeForDate(dateStr: string, publicHolidays: PublicHoliday[], override: boolean | null): DayType {
+  const holiday = override ?? publicHolidays.some((ph) => ph.date === dateStr);
+  if (holiday) return 'publicHoliday';
+  if (isSunday(dateStr)) return 'sunday';
+  if (isSaturday(dateStr)) return 'saturday';
+  return 'weekday';
 }
 
+/** The day type of the date a shift starts on (its public holiday override applies to this day only). */
 export function determineDayType(shift: Shift, publicHolidays: PublicHoliday[]): DayType {
-  if (isPublicHoliday(shift, publicHolidays)) return 'publicHoliday';
-  if (isSunday(shift.date)) return 'sunday';
-  if (isSaturday(shift.date)) return 'saturday';
-  return 'weekday';
+  return dayTypeForDate(shift.date, publicHolidays, shift.isPublicHolidayOverride);
 }
 
 function dayMultiplierFor(job: Job, dayType: DayType): number {
@@ -42,29 +44,22 @@ export function workedHoursFor(shift: Shift): number {
   return Math.max(0, minutes / 60);
 }
 
-/** An interval of the shift's timeline tagged with which base rate applies. */
+/** An interval of the shift's timeline tagged with which base rate and day type apply. */
 interface RawTimeSegment {
   start: Date;
   end: Date;
   rateLabel: RateLabel;
+  dayType: DayType;
 }
 
 /**
  * Splits a shift's [start, end) into segments tagged 'night' or 'morning'. When the job has no
- * nightRateEndsAt, the whole shift is one segment decided by start time alone (legacy
+ * nightRateEndsAt, the whole shift gets one label decided by start time alone (legacy
  * behavior). When it does, night rate is a recurring daily window [nightRateStartsAt,
  * nightRateEndsAt) that wraps past midnight — a shift running past the window's end reverts
- * to morningRate for the remainder, even mid-shift. On a Saturday/Sunday/public holiday, a job
- * with ignoreNightRateOnWeekendsAndHolidays set skips the window entirely: the whole shift is
- * morningRate, and only the weekend/PH multiplier applies.
+ * to morningRate for the remainder, even mid-shift.
  */
-function computeRawTimeSegments(shift: Shift, job: Job, dayType: DayType): RawTimeSegment[] {
-  const { start, end } = resolveShiftTimes(shift.date, shift.startTime, shift.endTime);
-
-  if (job.ignoreNightRateOnWeekendsAndHolidays && dayType !== 'weekday') {
-    return [{ start, end, rateLabel: 'morning' }];
-  }
-
+function nightWindowSegments(shift: Shift, job: Job, start: Date, end: Date): { start: Date; end: Date; rateLabel: RateLabel }[] {
   if (job.nightRateEndsAt == null) {
     const rateLabel: RateLabel = shift.startTime >= job.nightRateStartsAt ? 'night' : 'morning';
     return [{ start, end, rateLabel }];
@@ -88,23 +83,50 @@ function computeRawTimeSegments(shift: Shift, job: Job, dayType: DayType): RawTi
   }
   const points = [...boundaryTimes].sort((a, b) => a - b);
 
-  const segments: RawTimeSegment[] = [];
+  const segments: { start: Date; end: Date; rateLabel: RateLabel }[] = [];
   for (let i = 0; i < points.length - 1; i++) {
-    const segStart = new Date(points[i]);
-    const segEnd = new Date(points[i + 1]);
     const midpoint = new Date((points[i] + points[i + 1]) / 2);
     const isNight = nightIntervals.some((iv) => midpoint >= iv.start && midpoint < iv.end);
-    segments.push({ start: segStart, end: segEnd, rateLabel: isNight ? 'night' : 'morning' });
+    segments.push({ start: new Date(points[i]), end: new Date(points[i + 1]), rateLabel: isNight ? 'night' : 'morning' });
+  }
+  return segments;
+}
+
+/**
+ * Splits a shift into segments that each have one base rate (night/day, see
+ * nightWindowSegments) and one day type. With job.splitAtMidnight, hours after midnight take
+ * the day type of the date they fall on — a Friday night shift becomes Saturday at 12am, a
+ * Sunday night shift goes back to a weekday at 12am — otherwise the whole shift takes its start
+ * day's type. Then, for a job with ignoreNightRateOnWeekendsAndHolidays, any part falling on a
+ * Saturday, Sunday or public holiday uses the day rate, so only that day's multiplier applies.
+ */
+function computeRawTimeSegments(shift: Shift, job: Job, publicHolidays: PublicHoliday[]): RawTimeSegment[] {
+  const { start, end } = resolveShiftTimes(shift.date, shift.startTime, shift.endTime);
+  const startDayType = determineDayType(shift, publicHolidays);
+  const splitAtMidnight = job.splitAtMidnight !== false;
+
+  const pieces: RawTimeSegment[] = [];
+  for (const seg of nightWindowSegments(shift, job, start, end)) {
+    let cursor = seg.start;
+    while (cursor < seg.end) {
+      const nextMidnight = startOfDay(addDays(cursor, 1));
+      const pieceEnd = splitAtMidnight && nextMidnight < seg.end ? nextMidnight : seg.end;
+      const dateStr = formatDateOnly(cursor);
+      const dayType = !splitAtMidnight || dateStr === shift.date ? startDayType : dayTypeForDate(dateStr, publicHolidays, null);
+      const rateLabel = job.ignoreNightRateOnWeekendsAndHolidays && dayType !== 'weekday' ? 'morning' : seg.rateLabel;
+      pieces.push({ start: cursor, end: pieceEnd, rateLabel, dayType });
+      cursor = pieceEnd;
+    }
   }
 
-  // Merge adjacent segments that ended up with the same label (e.g. two candidate windows abutting exactly).
+  // Merge adjacent pieces that ended up with the same rate and day type.
   const merged: RawTimeSegment[] = [];
-  for (const seg of segments) {
+  for (const piece of pieces) {
     const prev = merged[merged.length - 1];
-    if (prev && prev.rateLabel === seg.rateLabel && prev.end.getTime() === seg.start.getTime()) {
-      prev.end = seg.end;
+    if (prev && prev.rateLabel === piece.rateLabel && prev.dayType === piece.dayType && prev.end.getTime() === piece.start.getTime()) {
+      prev.end = piece.end;
     } else {
-      merged.push({ ...seg });
+      merged.push({ ...piece });
     }
   }
   return merged;
@@ -112,20 +134,25 @@ function computeRawTimeSegments(shift: Shift, job: Job, dayType: DayType): RawTi
 
 interface HourSegment {
   rateLabel: RateLabel;
+  dayType: DayType;
   hours: number;
   /** Loaded $/hr for this segment (casual-loaded, day-multiplied) — before any OT tier multiplier. */
   rate: number;
 }
 
 /** Converts raw time segments into hour segments, removing the shift's unpaid break proportionally across them. */
-function toHourSegments(rawSegments: RawTimeSegment[], unpaidBreakMinutes: number, rateFor: (label: RateLabel) => number): HourSegment[] {
+function toHourSegments(
+  rawSegments: RawTimeSegment[],
+  unpaidBreakMinutes: number,
+  rateFor: (label: RateLabel, dayType: DayType) => number,
+): HourSegment[] {
   const totalRawMinutes = rawSegments.reduce((sum, seg) => sum + (seg.end.getTime() - seg.start.getTime()) / 60000, 0);
   if (totalRawMinutes <= 0) return [];
   return rawSegments.map((seg) => {
     const rawMinutes = (seg.end.getTime() - seg.start.getTime()) / 60000;
     const breakShare = unpaidBreakMinutes * (rawMinutes / totalRawMinutes);
     const netHours = Math.max(0, (rawMinutes - breakShare) / 60);
-    return { rateLabel: seg.rateLabel, hours: netHours, rate: rateFor(seg.rateLabel) };
+    return { rateLabel: seg.rateLabel, dayType: seg.dayType, hours: netHours, rate: rateFor(seg.rateLabel, seg.dayType) };
   });
 }
 
@@ -197,7 +224,15 @@ function splitSegmentsIntoTiers(tailSegments: HourSegment[], tiers: Job['overtim
     for (const seg of taken) {
       if (seg.hours <= 1e-9) continue;
       const rate = seg.rate * tier.multiplier;
-      result.push({ tierIndex, rateLabel: seg.rateLabel, hours: seg.hours, multiplier: tier.multiplier, rate, pay: seg.hours * rate });
+      result.push({
+        tierIndex,
+        rateLabel: seg.rateLabel,
+        dayType: seg.dayType,
+        hours: seg.hours,
+        multiplier: tier.multiplier,
+        rate,
+        pay: seg.hours * rate,
+      });
     }
     remaining = rest;
     consumed = 0;
@@ -209,7 +244,7 @@ function splitSegmentsIntoTiers(tailSegments: HourSegment[], tiers: Job['overtim
 function toRegularSegments(segments: HourSegment[]): RegularSegment[] {
   return segments
     .filter((s) => s.hours > 1e-9)
-    .map((s) => ({ rateLabel: s.rateLabel, hours: s.hours, rate: s.rate, pay: s.hours * s.rate }));
+    .map((s) => ({ rateLabel: s.rateLabel, dayType: s.dayType, hours: s.hours, rate: s.rate, pay: s.hours * s.rate }));
 }
 
 /** Calculates a shift's pay in isolation, using only its own day's overtime threshold. */
@@ -221,13 +256,14 @@ export function computeShiftDaily(
   const dayType = determineDayType(shift, publicHolidays);
   const dayMultiplier = dayMultiplierFor(job, dayType);
 
-  const rateFor = (label: RateLabel): number => {
+  const rateFor = (label: RateLabel, segmentDayType: DayType): number => {
     const base = label === 'night' ? job.nightRate : job.morningRate;
-    return base * (1 + job.casualLoadingPercent / 100) * dayMultiplier;
+    return base * (1 + job.casualLoadingPercent / 100) * dayMultiplierFor(job, segmentDayType);
   };
 
-  const rawSegments = computeRawTimeSegments(shift, job, dayType);
+  const rawSegments = computeRawTimeSegments(shift, job, publicHolidays);
   const hourSegments = toHourSegments(rawSegments, shift.unpaidBreakMinutes, rateFor);
+  const dayTypes = [...new Set(hourSegments.filter((s) => s.hours > 1e-9).map((s) => s.dayType))];
   const workedHours = hourSegments.reduce((sum, s) => sum + s.hours, 0);
 
   const dailyThreshold = job.overtimeThresholdHoursPerDay;
@@ -266,6 +302,7 @@ export function computeShiftDaily(
     baseRate,
     casualLoadedRate,
     dayType,
+    dayTypes: dayTypes.length > 0 ? dayTypes : [dayType],
     dayMultiplier,
     loadedHourlyRate,
     regularHours,
@@ -313,6 +350,7 @@ export function computeWeekPay(
       if (weeklyOvertimeHours > 0) {
         const asHourSegments: HourSegment[] = daily.regularSegments.map((s) => ({
           rateLabel: s.rateLabel,
+          dayType: s.dayType,
           hours: s.hours,
           rate: s.rate,
         }));

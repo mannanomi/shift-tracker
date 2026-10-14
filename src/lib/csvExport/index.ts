@@ -33,7 +33,7 @@ export function shiftsToCsv(report: RangeReport): string {
       shift.startTime,
       shift.endTime,
       breakdown.workedHours.toFixed(2),
-      breakdown.dayType,
+      breakdown.dayTypes.join(' + '),
       breakdown.loadedHourlyRate.toFixed(2),
       breakdown.finalRegularHours.toFixed(2),
       breakdown.finalRegularPay.toFixed(2),

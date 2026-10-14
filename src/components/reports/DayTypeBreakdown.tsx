@@ -15,12 +15,23 @@ const DAY_TYPES: { type: DayType; label: string; color: string }[] = [
 export function DayTypeBreakdown({ report }: { report: RangeReport }) {
   const totals = new Map<DayType, { pay: number; hours: number }>();
   let nightHours = 0;
+  const add = (dayType: DayType, pay: number, hours: number) => {
+    const t = totals.get(dayType) ?? { pay: 0, hours: 0 };
+    t.pay += pay;
+    t.hours += hours;
+    totals.set(dayType, t);
+  };
   for (const { breakdown } of report.shiftLines) {
-    const t = totals.get(breakdown.dayType) ?? { pay: 0, hours: 0 };
-    t.pay += breakdown.finalGrossPay;
-    t.hours += breakdown.workedHours;
-    totals.set(breakdown.dayType, t);
-    for (const seg of [...breakdown.finalRegularSegments, ...breakdown.overtimeSegments, ...breakdown.weeklyOvertimeSegments]) {
+    const segments = [...breakdown.finalRegularSegments, ...breakdown.overtimeSegments, ...breakdown.weeklyOvertimeSegments];
+    if (segments.length === 0) {
+      // ABN day entries have no slices — count them on their day.
+      add(breakdown.dayType, breakdown.finalGrossPay, breakdown.workedHours);
+      continue;
+    }
+    // Each slice (regular or overtime hours, never both) goes to the day it was worked, so a Friday night
+    // shift's hours after midnight count as Saturday.
+    for (const seg of segments) {
+      add(seg.dayType, seg.pay, seg.hours);
       if (seg.rateLabel === 'night') nightHours += seg.hours;
     }
   }

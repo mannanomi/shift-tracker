@@ -55,6 +55,13 @@ export interface Job {
    * multiplier applies, never a separate night dollar amount. Weekday shifts are unaffected.
    */
   ignoreNightRateOnWeekendsAndHolidays: boolean;
+  /**
+   * When true (the default), an overnight shift's hours after midnight are paid as the day
+   * they fall on — e.g. a Friday 6pm–6am shift earns the Saturday rate from 12am, and a Sunday
+   * night shift goes back to the weekday rate at 12am. When false, the whole shift is paid as
+   * the day it started on.
+   */
+  splitAtMidnight: boolean;
 
   saturdayMultiplier: number;
   sundayMultiplier: number;
@@ -156,6 +163,7 @@ export function normalizeJob(job: Job): Job {
     taxable: job.taxable ?? true,
     nightRateEndsAt: job.nightRateEndsAt ?? null,
     ignoreNightRateOnWeekendsAndHolidays: job.ignoreNightRateOnWeekendsAndHolidays ?? false,
+    splitAtMidnight: job.splitAtMidnight ?? true,
   };
 }
 
@@ -174,6 +182,7 @@ export function createDefaultJob(overrides: Partial<Job> = {}): Job {
     nightRateStartsAt: '14:00',
     nightRateEndsAt: null,
     ignoreNightRateOnWeekendsAndHolidays: false,
+    splitAtMidnight: true,
     saturdayMultiplier: 1.5,
     sundayMultiplier: 2,
     publicHolidayMultiplier: 1,

@@ -149,6 +149,7 @@ function earningsBreakdown(shift: Shift, publicHolidays: PublicHoliday[]): Shift
     baseRate: 0,
     casualLoadedRate: 0,
     dayType: determineDayType(shift, publicHolidays),
+    dayTypes: [determineDayType(shift, publicHolidays)],
     dayMultiplier: 1,
     loadedHourlyRate: hours > 0 ? pay / hours : 0,
     regularHours: hours,
