@@ -31,6 +31,7 @@ import { Modal } from './components/ui/Modal';
 import { QuickAddSheet } from './components/shifts/QuickAddSheet';
 import { ShiftForm } from './components/shifts/ShiftForm';
 import { LogoMark } from './components/ui/Logo';
+import { useSelectedShiftsDay } from './lib/selectedShiftsDay';
 
 /** Phone tab bar; the centre slot is the Quick add button. */
 const NAV_LEFT = [
@@ -59,11 +60,15 @@ function Splash({ message }: { message: string }) {
 /** One-tap Quick add sheet, with a way through to the full shift form. */
 function QuickAddFlow({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [fullForm, setFullForm] = useState<{ date: string; jobId?: string } | null>(null);
+  // On the Shifts page, adding starts from the day selected on the calendar.
+  const { pathname } = useLocation();
+  const selectedDay = useSelectedShiftsDay();
   return (
     <>
       {open && (
         <QuickAddSheet
           onClose={onClose}
+          initialDate={pathname === '/shifts' ? (selectedDay ?? undefined) : undefined}
           onMoreOptions={(date, jobId) => {
             onClose();
             setFullForm({ date, jobId });

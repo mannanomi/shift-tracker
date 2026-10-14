@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { addDays, addMonths } from 'date-fns';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock, Inbox, List, Plus } from 'lucide-react';
 import { formatHours } from '../lib/format';
@@ -14,6 +14,9 @@ import { Modal } from '../components/ui/Modal';
 import { PageHeader } from '../components/ui/PageHeader';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ShiftForm } from '../components/shifts/ShiftForm';
+import { Sheet } from '../components/ui/Sheet';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { setSelectedShiftsDay } from '../lib/selectedShiftsDay';
 import { toast } from '../components/ui/Toast';
 import { ShiftLineCard } from '../components/shifts/ShiftLineCard';
 import { ShiftCalendar, getCalendarGridRange } from '../components/shifts/ShiftCalendar';
@@ -33,6 +36,13 @@ export function ShiftsPage() {
   const todayStr = useMemo(() => formatDateOnly(new Date()), []);
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [monthDirection, setMonthDirection] = useState<1 | -1 | 0>(0);
+  // Phones show the selected day in a pop-up sheet; laptops show it beside the calendar.
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const [daySheetOpen, setDaySheetOpen] = useState(false);
+
+  // Share the selected day so the bottom bar's + adds a shift on it.
+  useEffect(() => setSelectedShiftsDay(selectedDate), [selectedDate]);
+  useEffect(() => () => setSelectedShiftsDay(null), []);
 
   const listRangeStart = useMemo(() => formatDateOnly(addDays(new Date(), -90)), []);
   const listRangeEnd = useMemo(() => formatDateOnly(addDays(new Date(), 60)), []);
@@ -70,6 +80,7 @@ export function ShiftsPage() {
 
   function handleCopy(shift: Shift) {
     const { id: _id, ...rest } = shift;
+    setDaySheetOpen(false);
     setFormTarget({ mode: 'new', template: { ...rest, date: formatDateOnly(addDays(parseDateOnly(shift.date), 7)) } });
   }
 
@@ -84,6 +95,16 @@ export function ShiftsPage() {
     setMonthDirection(delta);
     setCalendarMonth(next);
     setSelectedDate(todayStr.startsWith(ym) ? todayStr : (firstWithShift ?? `${ym}-01`));
+  }
+
+  function selectDate(date: string) {
+    setSelectedDate(date);
+    if (!isDesktop) setDaySheetOpen(true);
+  }
+
+  function addOnSelectedDay() {
+    setDaySheetOpen(false);
+    setFormTarget({ mode: 'new', date: selectedDate });
   }
 
   function goToToday() {
@@ -104,6 +125,48 @@ export function ShiftsPage() {
   const selectedTotal = selectedDateLines.reduce((sum, l) => sum + l.breakdown.finalGrossPay, 0);
   const selectedHours = selectedDateLines.reduce((sum, l) => sum + l.breakdown.workedHours, 0);
   const viewingToday = selectedDate === todayStr && monthPrefix === todayStr.slice(0, 7);
+  const selectedDay = parseDateOnly(selectedDate);
+  const dayEyebrow = selectedDate === todayStr ? 'Today' : selectedDay.toLocaleDateString('en-AU', { weekday: 'long' });
+  const dayShort = selectedDay.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+  const daySummary =
+    selectedDateLines.length > 0 ? (
+      <div className="shrink-0 text-right">
+        <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
+          <Money amount={selectedTotal} />
+        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {selectedDateLines.length} shift{selectedDateLines.length === 1 ? '' : 's'}
+          {selectedHours > 0 && ` · ${formatHours(selectedHours)}`}
+        </p>
+      </div>
+    ) : null;
+  const dayShiftCards = (
+    <>
+      {selectedDateLines.length === 0 && (
+        <Card>
+          <EmptyState icon={<CalendarDays className="h-5 w-5" />} title="Nothing logged this day" subtitle="Add a shift or earnings for this date" />
+        </Card>
+      )}
+      {selectedDateLines.map(({ shift, job, breakdown }, index) => (
+        <ShiftLineCard
+          key={shift.id}
+          index={index}
+          showDate={false}
+          shift={shift}
+          job={job}
+          breakdown={breakdown}
+          expanded={expandedId === shift.id}
+          onToggleExpand={() => setExpandedId(expandedId === shift.id ? null : shift.id)}
+          onEdit={() => {
+            setDaySheetOpen(false);
+            setFormTarget({ mode: 'edit', shift });
+          }}
+          onDelete={() => handleDelete(shift)}
+          onCopy={() => handleCopy(shift)}
+        />
+      ))}
+    </>
+  );
 
   return (
     <div className="space-y-4 lg:space-y-6">
@@ -155,67 +218,26 @@ export function ShiftsPage() {
               shiftsByDate={shiftsByDate}
               todayStr={todayStr}
               selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
+              onSelectDate={selectDate}
               onChangeMonth={changeMonth}
               direction={monthDirection}
             />
             <p className="mt-2 text-center text-[11px] text-slate-400 lg:hidden dark:text-slate-500">Swipe the calendar to change month</p>
           </Card>
 
-          <section key={selectedDate} className="space-y-2.5">
+          <section key={selectedDate} className="hidden space-y-2.5 lg:block">
             <div className="flex items-end justify-between gap-3 px-1">
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400">
-                  {selectedDate === todayStr ? 'Today' : parseDateOnly(selectedDate).toLocaleDateString('en-AU', { weekday: 'long' })}
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400">{dayEyebrow}</p>
                 <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                  {parseDateOnly(selectedDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  {selectedDay.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </h2>
               </div>
-              {selectedDateLines.length > 0 && (
-                <div className="shrink-0 text-right">
-                  <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                    <Money amount={selectedTotal} />
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {selectedDateLines.length} shift{selectedDateLines.length === 1 ? '' : 's'}
-                    {selectedHours > 0 && ` · ${formatHours(selectedHours)}`}
-                  </p>
-                </div>
-              )}
+              {daySummary}
             </div>
-
-            {selectedDateLines.length === 0 && (
-              <Card>
-                <EmptyState
-                  icon={<CalendarDays className="h-5 w-5" />}
-                  title="Nothing logged this day"
-                  subtitle="Add a shift or earnings for this date"
-                />
-              </Card>
-            )}
-            {selectedDateLines.map(({ shift, job, breakdown }, index) => (
-              <ShiftLineCard
-                key={shift.id}
-                index={index}
-                showDate={false}
-                shift={shift}
-                job={job}
-                breakdown={breakdown}
-                expanded={expandedId === shift.id}
-                onToggleExpand={() => setExpandedId(expandedId === shift.id ? null : shift.id)}
-                onEdit={() => setFormTarget({ mode: 'edit', shift })}
-                onDelete={() => handleDelete(shift)}
-                onCopy={() => handleCopy(shift)}
-              />
-            ))}
-            <Button
-              variant="secondary"
-              className="w-full py-2.5!"
-              icon={<Plus className="h-4 w-4" />}
-              onClick={() => setFormTarget({ mode: 'new', date: selectedDate })}
-            >
-              Add on {parseDateOnly(selectedDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+            {dayShiftCards}
+            <Button variant="secondary" className="w-full py-2.5!" icon={<Plus className="h-4 w-4" />} onClick={addOnSelectedDay}>
+              Add on {dayShort}
             </Button>
           </section>
         </div>
@@ -243,6 +265,22 @@ export function ShiftsPage() {
             />
           ))}
         </div>
+      )}
+
+      {viewMode === 'calendar' && daySheetOpen && !isDesktop && (
+        <Sheet
+          title={selectedDay.toLocaleDateString('en-AU', { day: 'numeric', month: 'long' })}
+          eyebrow={dayEyebrow}
+          aside={daySummary}
+          onClose={() => setDaySheetOpen(false)}
+        >
+          <div key={selectedDate} className="space-y-2.5">
+            {dayShiftCards}
+            <Button className="h-12 w-full text-base!" icon={<Plus className="h-5 w-5" />} onClick={addOnSelectedDay}>
+              Add shift on {dayShort}
+            </Button>
+          </div>
+        </Sheet>
       )}
 
       {formTarget && (

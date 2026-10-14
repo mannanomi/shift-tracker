@@ -4,7 +4,7 @@ import { Plus, Receipt, SlidersHorizontal, Zap } from 'lucide-react';
 import type { Job, Shift } from '../../types';
 import { useActiveJobs, useShifts } from '../../hooks/useData';
 import { shiftsRepo } from '../../db/repository';
-import { formatDateOnly } from '../../lib/dateUtils';
+import { formatDateOnly, parseDateOnly } from '../../lib/dateUtils';
 import { Sheet } from '../ui/Sheet';
 import { EmptyState } from '../ui/EmptyState';
 import { haptic, toast } from '../ui/Toast';
@@ -47,8 +47,11 @@ function recentTemplates(shifts: Shift[], jobs: Job[]): Template[] {
 export function QuickAddSheet({
   onClose,
   onMoreOptions,
+  initialDate,
 }: {
   onClose: () => void;
+  /** Preselects this day (e.g. the date selected on the Shifts calendar). */
+  initialDate?: string;
   /** Opens the full form for this date, preselecting a job when given (used for ABN earnings). */
   onMoreOptions: (date: string, jobId?: string) => void;
 }) {
@@ -60,7 +63,14 @@ export function QuickAddSheet({
     { label: 'Today', date: formatDateOnly(today) },
     { label: 'Tomorrow', date: formatDateOnly(addDays(today, 1)) },
   ];
-  const [date, setDate] = useState(dayOptions[1].date);
+  // A day picked on the calendar that isn't one of the three gets its own option, first.
+  if (initialDate && !dayOptions.some((o) => o.date === initialDate)) {
+    dayOptions.unshift({
+      label: parseDateOnly(initialDate).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }),
+      date: initialDate,
+    });
+  }
+  const [date, setDate] = useState(initialDate ?? dayOptions[dayOptions.length - 2].date);
   const templates = useMemo(() => (jobs && shifts ? recentTemplates(shifts, jobs) : []), [jobs, shifts]);
   const abnJobs = (jobs ?? []).filter((j) => j.kind === 'abn');
 
@@ -83,7 +93,7 @@ export function QuickAddSheet({
 
   return (
     <Sheet title="Quick add" onClose={onClose}>
-      <div className="mb-4 grid grid-cols-3 gap-1.5 rounded-xl bg-slate-100 p-1 dark:bg-slate-900/60">
+      <div className={`mb-4 grid gap-1.5 rounded-xl bg-slate-100 p-1 dark:bg-slate-900/60 ${dayOptions.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
         {dayOptions.map((opt) => (
           <button
             key={opt.date}

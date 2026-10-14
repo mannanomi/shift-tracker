@@ -1,7 +1,21 @@
 import { X } from 'lucide-react';
 
 /** A bottom sheet on phones, a centred dialog on larger screens. */
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+export function Sheet({
+  title,
+  eyebrow,
+  aside,
+  onClose,
+  children,
+}: {
+  title: string;
+  /** Small label above the title (e.g. "Today"). */
+  eyebrow?: string;
+  /** Shown at the right of the header, before the close button (e.g. a total). */
+  aside?: React.ReactNode;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <div className="animate-fade-in fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-[2px] sm:items-center sm:p-4 dark:bg-black/60" onClick={onClose}>
       <div
@@ -9,11 +23,15 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-slate-200 sm:hidden dark:bg-slate-600" />
-        <div className="flex items-center justify-between px-5 pb-2 pt-3">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+        <div className="flex items-center justify-between gap-3 px-5 pb-2 pt-3">
+          <div className="min-w-0 flex-1">
+            {eyebrow && <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400">{eyebrow}</p>}
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+          </div>
+          {aside}
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
