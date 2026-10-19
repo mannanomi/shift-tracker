@@ -108,4 +108,125 @@ describe('buildRangeReport', () => {
     expect(saturday.breakdown.dayType).toBe('saturday');
     expect(saturday.breakdown.loadedHourlyRate).toBeCloseTo(36.5);
   });
+
 });
+
+describe('fortnightly overtime (e.g. a full-time guard on 76 hours)', () => {
+  const ANCHOR = '2026-08-31'; // pay cycles start Mon 31 Aug, 14 Sep, 28 Sep…
+  const guardJob = (overrides = {}) =>
+    createDefaultJob({
+      id: 'mss',
+      name: 'MSS - Non Restraint',
+      morningRate: 30,
+      saturdayMultiplier: 1.5,
+      sundayMultiplier: 2,
+      includeSuper: true,
+      superRatePercent: 12,
+      overtimeThresholdHoursPerFortnight: 76,
+      overtimeFromSundaysFirst: true,
+      ...overrides,
+    });
+  // Fortnight Mon 28 Sep – Sun 11 Oct: 5 weekdays × 10h, Sat 6h, Sun 12h, Mon+Tue 10h each = 88h.
+  const fortnightShifts = (jobFor: (date: string) => string = () => 'mss', lastEnd = '18:00') => [
+    ...['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02'].map((date) =>
+      makeShift({ jobId: jobFor(date), date, startTime: '08:00', endTime: '18:00' }),
+    ),
+    makeShift({ jobId: jobFor('2026-10-03'), date: '2026-10-03', startTime: '08:00', endTime: '14:00' }), // Saturday 6h
+    makeShift({ jobId: jobFor('2026-10-04'), date: '2026-10-04', startTime: '06:00', endTime: '18:00' }), // Sunday 12h
+    makeShift({ jobId: jobFor('2026-10-05'), date: '2026-10-05', startTime: '08:00', endTime: '18:00' }),
+    makeShift({ jobId: jobFor('2026-10-06'), date: '2026-10-06', startTime: '08:00', endTime: lastEnd }),
+  ];
+
+  it('pays the hours over 76 as overtime taken from Sunday, at the normal Sunday rate and without super', () => {
+    const report = buildRangeReport('2026-09-28', '2026-10-11', [guardJob()], fortnightShifts(), [], 1, ANCHOR);
+    expect(report.totalHours).toBeCloseTo(88);
+
+    const sunday = report.shiftLines.find((l) => l.shift.date === '2026-10-04')!.breakdown;
+    expect(sunday.finalRegularHours).toBeCloseTo(0);
+    expect(sunday.weeklyOvertimeSegments).toEqual([
+      expect.objectContaining({ basis: 'sundayRate', dayType: 'sunday', hours: 12, multiplier: 1, rate: 60 }),
+    ]);
+    expect(sunday.finalGrossPay).toBeCloseTo(720); // same as an ordinary Sunday: 12h × $60
+    expect(sunday.superAmount).toBe(0);
+
+    // Everything else stays ordinary: 70 weekday hours at $30 + 6 Saturday hours at $45.
+    const others = report.shiftLines.filter((l) => l.shift.date !== '2026-10-04');
+    expect(others.every((l) => l.breakdown.weeklyOvertimeHours === 0)).toBe(true);
+    expect(report.totalGrossPay).toBeCloseTo(2100 + 270 + 720);
+    expect(report.totalSuper).toBeCloseTo(0.12 * (2100 + 270));
+  });
+
+  it('takes overtime beyond the Sunday hours from the last shift, at 1.5× then 2×', () => {
+    // Tuesday runs to 8pm, so the fortnight is 90h: 14h over → 12h Sunday + 2h off the end of Tuesday.
+    const report = buildRangeReport('2026-09-28', '2026-10-11', [guardJob()], fortnightShifts(undefined, '20:00'), [], 1, ANCHOR);
+    const tuesday = report.shiftLines.find((l) => l.shift.date === '2026-10-06')!.breakdown;
+    expect(tuesday.finalRegularHours).toBeCloseTo(10);
+    expect(tuesday.weeklyOvertimeSegments).toEqual([
+      expect.objectContaining({ basis: 'tier', tierIndex: 0, hours: 2, multiplier: 1.5, rate: 45 }),
+    ]);
+    expect(tuesday.weeklyOvertimePay).toBeCloseTo(90);
+    expect(tuesday.superAmount).toBeCloseTo(0.12 * 300); // super on the 10 ordinary hours only
+  });
+
+  it('with "pay overtime at the Sunday rate", pays the hours beyond Sunday at the Sunday rate too', () => {
+    const job = guardJob({ overtimeAtSundayRate: true });
+    const report = buildRangeReport('2026-09-28', '2026-10-11', [job], fortnightShifts(undefined, '20:00'), [], 1, ANCHOR);
+    const tuesday = report.shiftLines.find((l) => l.shift.date === '2026-10-06')!.breakdown;
+    expect(tuesday.weeklyOvertimeSegments).toEqual([
+      expect.objectContaining({ basis: 'sundayRate', dayType: 'weekday', hours: 2, multiplier: 2, rate: 60 }),
+    ]);
+    expect(tuesday.weeklyOvertimePay).toBeCloseTo(120);
+    const sunday = report.shiftLines.find((l) => l.shift.date === '2026-10-04')!.breakdown;
+    expect(sunday.weeklyOvertimePay).toBeCloseTo(720); // Sunday hours keep their normal Sunday pay
+  });
+
+  it('pays night hours that become overtime at the flat Sunday rate, without night loading', () => {
+    const job = guardJob({ overtimeAtSundayRate: true, nightRate: 40, nightRateStartsAt: '18:00', nightRateEndsAt: '06:00' });
+    // Tuesday runs 8am–8pm: its last 2 hours (6–8pm) are night hours and the 2 hours over the Sunday OT.
+    const report = buildRangeReport('2026-09-28', '2026-10-11', [job], fortnightShifts(undefined, '20:00'), [], 1, ANCHOR);
+    const tuesday = report.shiftLines.find((l) => l.shift.date === '2026-10-06')!.breakdown;
+    expect(tuesday.weeklyOvertimeSegments).toEqual([expect.objectContaining({ rateLabel: 'night', hours: 2, rate: 60 })]); // not 40 × 2
+  });
+
+  it('lifts a Saturday overtime hour to the Sunday rate, but keeps a public holiday hour at its higher rate', () => {
+    const job = guardJob({ overtimeAtSundayRate: true, overtimeFromSundaysFirst: false, publicHolidayMultiplier: 2.5 });
+    // 76h on weekdays (7 × 10h + 6h), then 4h on Saturday 10 Oct as the last shift of the fortnight.
+    const shifts = [
+      ...['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-05', '2026-10-06'].map((date) =>
+        makeShift({ jobId: 'mss', date, startTime: '08:00', endTime: '18:00' }),
+      ),
+      makeShift({ jobId: 'mss', date: '2026-10-07', startTime: '08:00', endTime: '14:00' }),
+      makeShift({ jobId: 'mss', date: '2026-10-10', startTime: '08:00', endTime: '12:00' }), // Saturday, 4h over the limit
+    ];
+    const saturday = buildRangeReport('2026-09-28', '2026-10-11', [job], shifts, [], 1, ANCHOR)
+      .shiftLines.find((l) => l.shift.date === '2026-10-10')!.breakdown;
+    expect(saturday.weeklyOvertimeSegments).toEqual([expect.objectContaining({ dayType: 'saturday', hours: 4, rate: 60 })]);
+
+    const holidays = [{ id: 'h', date: '2026-10-10', name: 'Test holiday', state: 'SA' }];
+    const holiday = buildRangeReport('2026-09-28', '2026-10-11', [job], shifts, holidays, 1, ANCHOR)
+      .shiftLines.find((l) => l.shift.date === '2026-10-10')!.breakdown;
+    expect(holiday.weeklyOvertimeSegments).toEqual([expect.objectContaining({ dayType: 'publicHoliday', hours: 4, multiplier: 1, rate: 75 })]);
+  });
+
+  it('counts two jobs with the same employer towards one 76-hour limit', () => {
+    const restraint = guardJob({ id: 'mss-r', name: 'MSS - Restraint' });
+    const nonRestraint = guardJob({ id: 'mss-nr', name: 'MSS - Non Restraint' });
+    // Alternate the shifts between the two jobs; Sunday is on Non Restraint.
+    const shifts = fortnightShifts((date) => (['2026-09-28', '2026-09-30', '2026-10-02', '2026-10-05'].includes(date) ? 'mss-r' : 'mss-nr'));
+    const report = buildRangeReport('2026-09-28', '2026-10-11', [restraint, nonRestraint], shifts, [], 1, ANCHOR);
+    const sunday = report.shiftLines.find((l) => l.shift.date === '2026-10-04')!;
+    expect(sunday.job.id).toBe('mss-nr');
+    expect(sunday.breakdown.weeklyOvertimeHours).toBeCloseTo(12);
+    expect(report.shiftLines.filter((l) => l.breakdown.weeklyOvertimeHours > 0)).toHaveLength(1);
+  });
+
+  it('keeps a job with a different employer on its own limit', () => {
+    const mss = guardJob({ id: 'mss' });
+    const other = guardJob({ id: 'other', name: 'Coles - Night fill' });
+    const shifts = fortnightShifts((date) => (date >= '2026-10-03' ? 'other' : 'mss'));
+    const report = buildRangeReport('2026-09-28', '2026-10-11', [mss, other], shifts, [], 1, ANCHOR);
+    // 50h for MSS and 38h for Coles: neither passes 76, so there's no overtime.
+    expect(report.shiftLines.every((l) => l.breakdown.weeklyOvertimeHours === 0)).toBe(true);
+  });
+});
+

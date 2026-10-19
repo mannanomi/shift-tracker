@@ -39,7 +39,7 @@ export function Dashboard() {
 
   const reports = useMemo(() => {
     if (!jobs || !shifts || !publicHolidays || !settings) return null;
-    const build = (start: string, end: string) => buildRangeReport(start, end, jobs, shifts, publicHolidays, settings.weekStartDay);
+    const build = (start: string, end: string) => buildRangeReport(start, end, jobs, shifts, publicHolidays, settings.weekStartDay, settings.fortnightAnchorDate);
     const lastWeek = formatDateOnly(addDays(parseDateOnly(today), -7));
     return {
       week: build(startOfWeekStr(today, settings.weekStartDay), endOfWeekStr(today, settings.weekStartDay)),

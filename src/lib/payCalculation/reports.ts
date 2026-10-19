@@ -1,6 +1,7 @@
 import { incomeCategory, type IncomeCategory, type Job, type PublicHoliday, type Shift } from '../../types';
-import { startOfWeekStr } from '../dateUtils';
-import { computeWeekPay, determineDayType } from './engine';
+import { startOfFortnightStr, startOfWeekStr } from '../dateUtils';
+import { employerOf } from '../employer';
+import { computeShiftDaily, computeWeekPay, determineDayType, reconcilePeriodOvertime, type PeriodOvertimeRule } from './engine';
 import type { ShiftWeeklyBreakdown } from './types';
 
 export interface ShiftLine {
@@ -41,18 +42,22 @@ export interface RangeReport {
 }
 
 /**
- * Computes every shift's reconciled pay breakdown, grouping shifts into full calendar weeks
- * (per weekStartDay) per job before running weekly-OT reconciliation — so a report range that
- * doesn't align to week boundaries (e.g. most fortnights) still reconciles OT correctly.
+ * Computes every shift's reconciled pay breakdown. Jobs on a weekly overtime limit (or none)
+ * are grouped into full calendar weeks (per weekStartDay) per job, so a report range that
+ * doesn't align to week boundaries (e.g. most fortnights) still reconciles OT correctly. Jobs on
+ * a fortnightly limit are grouped by pay-cycle fortnight instead, and jobs with the same
+ * employer and the same fortnight rule share one limit (e.g. two MSS jobs counting towards 76).
  */
 function computeAllShiftLines(
   jobs: Job[],
   shifts: Shift[],
   publicHolidays: PublicHoliday[],
   weekStartDay: 0 | 1,
+  fortnightAnchorDate?: string,
 ): ShiftLine[] {
   const jobsById = new Map(jobs.map((j) => [j.id, j]));
   const lines: ShiftLine[] = [];
+  const fortnightPools = new Map<string, { rule: PeriodOvertimeRule; jobIds: Set<string> }>();
 
   for (const job of jobs) {
     const jobShifts = shifts.filter((s) => s.jobId === job.id);
@@ -62,6 +67,22 @@ function computeAllShiftLines(
       }
       continue;
     }
+
+    if (job.overtimeThresholdHoursPerFortnight != null && fortnightAnchorDate) {
+      const rule: PeriodOvertimeRule = {
+        thresholdHours: job.overtimeThresholdHoursPerFortnight,
+        tiers: job.overtimeTiers,
+        sundayFirst: job.overtimeFromSundaysFirst,
+        atSundayRate: job.overtimeAtSundayRate,
+      };
+      const who = employerOf(job)?.toLowerCase() ?? `job:${job.id}`;
+      const key = [who, rule.thresholdHours, rule.sundayFirst, rule.atSundayRate, JSON.stringify(rule.tiers)].join('|');
+      const pool = fortnightPools.get(key) ?? { rule, jobIds: new Set<string>() };
+      pool.jobIds.add(job.id);
+      fortnightPools.set(key, pool);
+      continue;
+    }
+
     const byWeek = new Map<string, Shift[]>();
     for (const shift of jobShifts) {
       const weekKey = startOfWeekStr(shift.date, weekStartDay);
@@ -80,6 +101,26 @@ function computeAllShiftLines(
     }
   }
 
+  for (const { rule, jobIds } of fortnightPools.values()) {
+    const byFortnight = new Map<string, Shift[]>();
+    for (const shift of shifts) {
+      if (!jobIds.has(shift.jobId)) continue;
+      const key = startOfFortnightStr(shift.date, fortnightAnchorDate!);
+      const group = byFortnight.get(key) ?? [];
+      group.push(shift);
+      byFortnight.set(key, group);
+    }
+    for (const group of byFortnight.values()) {
+      group.sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)));
+      const items = group.map((shift) => {
+        const job = jobsById.get(shift.jobId)!;
+        return { shift, job, daily: computeShiftDaily(shift, job, publicHolidays) };
+      });
+      const breakdowns = reconcilePeriodOvertime(items, rule);
+      items.forEach(({ shift, job }, i) => lines.push({ shift, job, breakdown: breakdowns[i] }));
+    }
+  }
+
   return lines;
 }
 
@@ -90,8 +131,10 @@ export function buildRangeReport(
   shifts: Shift[],
   publicHolidays: PublicHoliday[],
   weekStartDay: 0 | 1,
+  /** The pay cycle's anchor (settings.fortnightAnchorDate); needed for fortnightly overtime limits. */
+  fortnightAnchorDate?: string,
 ): RangeReport {
-  const allLines = computeAllShiftLines(jobs, shifts, publicHolidays, weekStartDay);
+  const allLines = computeAllShiftLines(jobs, shifts, publicHolidays, weekStartDay, fortnightAnchorDate);
   const shiftLines = allLines.filter((line) => line.shift.date >= startDate && line.shift.date <= endDate);
 
   const subtotalsByJob = new Map<string, JobSubtotal>();

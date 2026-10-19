@@ -1,4 +1,4 @@
-import type { DayType, RateLabel, ShiftWeeklyBreakdown } from '../../lib/payCalculation/types';
+import type { DayType, OvertimeSegment, RateLabel, ShiftWeeklyBreakdown } from '../../lib/payCalculation/types';
 import { formatCurrency, formatHours } from '../../lib/format';
 
 const DAY_TYPE_LABEL: Record<ShiftWeeklyBreakdown['dayType'], string> = {
@@ -72,10 +72,14 @@ export function ShiftBreakdown({ breakdown, abn = false }: { breakdown: ShiftWee
             {formatCurrency(seg.pay)}
           </Row>
         ))}
-        {breakdown.weeklyOvertimeSegments.map((seg, i) => (
+        {mergeSundayRateRows(breakdown.weeklyOvertimeSegments).map((seg, i) => (
           <Row
             key={`weekly-${i}`}
-            label={`Weekly OT tier ${seg.tierIndex + 1}${isSplitShift ? ` – ${sliceLabel(seg)}` : ''} (${formatHours(seg.hours)} @ ${seg.multiplier}x)`}
+            label={
+              seg.basis === 'sundayRate'
+                ? `Overtime at Sunday rate (${formatHours(seg.hours)} @ ${formatCurrency(seg.rate)}/hr)`
+                : `Overtime ${seg.multiplier}x${isSplitShift ? ` – ${sliceLabel(seg)}` : ''} (${formatHours(seg.hours)})`
+            }
           >
             {formatCurrency(seg.pay)}
           </Row>
@@ -85,10 +89,27 @@ export function ShiftBreakdown({ breakdown, abn = false }: { breakdown: ShiftWee
         <Row label="Gross pay">{formatCurrency(breakdown.finalGrossPay)}</Row>
       </div>
       {breakdown.superAmount > 0 && (
-        <Row label="Superannuation (additional, not deducted)">{formatCurrency(breakdown.superAmount)}</Row>
+        <Row label={`Superannuation (on ordinary hours${breakdown.weeklyOvertimeHours > 0 || breakdown.overtimeSegments.length > 0 ? ', not overtime' : ''})`}>
+          {formatCurrency(breakdown.superAmount)}
+        </Row>
       )}
     </div>
   );
+}
+
+/** Overtime paid at the flat Sunday rate is one rate however the hours split by day/night, so show it as one row. */
+function mergeSundayRateRows(segments: OvertimeSegment[]): OvertimeSegment[] {
+  const out: OvertimeSegment[] = [];
+  for (const seg of segments) {
+    const same = seg.basis === 'sundayRate' ? out.find((o) => o.basis === 'sundayRate' && Math.abs(o.rate - seg.rate) < 1e-9) : undefined;
+    if (same) {
+      same.hours += seg.hours;
+      same.pay += seg.pay;
+    } else {
+      out.push({ ...seg });
+    }
+  }
+  return out;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

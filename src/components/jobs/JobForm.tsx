@@ -3,7 +3,7 @@ import { Bike, Check, ChevronDown, Clock, DollarSign, PiggyBank, Plus, Receipt, 
 import { createDefaultJob, normalizeJob, type Job, type JobKind } from '../../types';
 import { jobsRepo } from '../../db/repository';
 import { useJobs } from '../../hooks/useData';
-import { employerOf } from '../../lib/payslip';
+import { employerOf } from '../../lib/employer';
 import { formatCurrency } from '../../lib/format';
 import { Button } from '../ui/Button';
 import { Checkbox, Field, Input } from '../ui/Field';
@@ -33,7 +33,7 @@ function toFormState(job?: Job): Job {
 export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
   const [form, setForm] = useState<Job>(() => toFormState(job));
   const [showOvertime, setShowOvertime] = useState(
-    () => Boolean(job?.overtimeThresholdHoursPerDay || job?.overtimeThresholdHoursPerWeek),
+    () => Boolean(job?.overtimeThresholdHoursPerDay || job?.overtimeThresholdHoursPerWeek || job?.overtimeThresholdHoursPerFortnight),
   );
   const [showSuper, setShowSuper] = useState(() => Boolean(job?.includeSuper));
   const allJobs = useJobs();
@@ -298,8 +298,9 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
             open={showOvertime}
             onToggle={() => setShowOvertime((v) => !v)}
           >
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="OT threshold — hours/day">
+            <p className="-mt-1 text-xs text-slate-400 dark:text-slate-500">Overtime starts after this many hours. Leave blank if it doesn't apply.</p>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Per day">
                 <Input
                   type="number"
                   step="0.25"
@@ -309,17 +310,61 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
                   onChange={(e) => update('overtimeThresholdHoursPerDay', e.target.value === '' ? null : Number(e.target.value))}
                 />
               </Field>
-              <Field label="OT threshold — hours/week">
+              <Field label="Per week">
                 <Input
                   type="number"
                   step="0.25"
                   min="0"
                   value={form.overtimeThresholdHoursPerWeek ?? ''}
                   placeholder="e.g. 38"
+                  disabled={form.overtimeThresholdHoursPerFortnight != null}
                   onChange={(e) => update('overtimeThresholdHoursPerWeek', e.target.value === '' ? null : Number(e.target.value))}
                 />
               </Field>
+              <Field label="Per fortnight">
+                <Input
+                  type="number"
+                  step="0.25"
+                  min="0"
+                  value={form.overtimeThresholdHoursPerFortnight ?? ''}
+                  placeholder="e.g. 76"
+                  onChange={(e) => update('overtimeThresholdHoursPerFortnight', e.target.value === '' ? null : Number(e.target.value))}
+                />
+              </Field>
             </div>
+            {form.overtimeThresholdHoursPerFortnight != null && (
+              <p className="-mt-1 text-xs text-slate-400 dark:text-slate-500">
+                Counted over your pay-cycle fortnight (Settings). Jobs with the same employer and the same fortnight limit
+                share it{employerOf(form) ? ` — e.g. all your ${employerOf(form)} jobs count towards one ${form.overtimeThresholdHoursPerFortnight} hours` : ''}. The weekly limit isn't used while this is set.
+              </p>
+            )}
+
+            {(form.overtimeThresholdHoursPerWeek != null || form.overtimeThresholdHoursPerFortnight != null) && (
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <Checkbox
+                  label="Take overtime from Sunday hours first"
+                  checked={form.overtimeFromSundaysFirst}
+                  onChange={(e) => update('overtimeFromSundaysFirst', e.target.checked)}
+                />
+                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                  Hours over the limit come out of Sunday hours first, paid at the Sunday rate. Any overtime beyond the Sunday
+                  hours comes from the last shifts of the period.
+                </p>
+                <div className="mt-3">
+                  <Checkbox
+                    label="Pay overtime at the Sunday rate"
+                    checked={form.overtimeAtSundayRate}
+                    onChange={(e) => update('overtimeAtSundayRate', e.target.checked)}
+                  />
+                  <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                    Every overtime hour is paid the Sunday rate (day rate × Sunday loading
+                    {form.morningRate > 0 ? ` = $${(form.morningRate * (1 + form.casualLoadingPercent / 100) * form.sundayMultiplier).toFixed(2)}/hr` : ''}),
+                    even at night, instead of the tiers below. A public holiday hour keeps its holiday rate if higher. No super
+                    is paid on overtime.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <Field label="Overtime tiers">
               <div className="space-y-2">

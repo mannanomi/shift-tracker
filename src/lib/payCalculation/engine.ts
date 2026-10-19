@@ -225,6 +225,7 @@ function splitSegmentsIntoTiers(tailSegments: HourSegment[], tiers: Job['overtim
       if (seg.hours <= 1e-9) continue;
       const rate = seg.rate * tier.multiplier;
       result.push({
+        basis: 'tier',
         tierIndex,
         rateLabel: seg.rateLabel,
         dayType: seg.dayType,
@@ -314,58 +315,100 @@ export function computeShiftDaily(
   };
 }
 
+/** A weekly or fortnightly limit on ordinary hours, after which hours become overtime. */
+export interface PeriodOvertimeRule {
+  thresholdHours: number;
+  tiers: Job['overtimeTiers'];
+  /** Take overtime from Sunday hours first, paid at their normal Sunday rate. */
+  sundayFirst: boolean;
+  /** Pay all overtime at the Sunday rate instead of the tiers. */
+  atSundayRate: boolean;
+}
+
 /**
- * Calculates pay for every shift a job worked in one week, reconciling the weekly overtime
- * threshold across shifts in chronological order: once cumulative non-daily-OT hours cross
- * the threshold, the excess is reclassified (starting from the earliest hours past the
- * threshold, i.e. peeled off the end of each shift's own regular segments) into weekly-OT
- * tiers, applied on top of whichever rate those trailing hours actually fall under.
+ * One overtime slice at the Sunday rate: the job's day rate (with casual loading) × its Sunday
+ * multiplier — a flat rate, so night hours don't carry night loading into overtime. A public
+ * holiday hour keeps its own pay if that is higher.
  */
-export function computeWeekPay(
-  shiftsInWeek: Shift[],
-  job: Job,
-  publicHolidays: PublicHoliday[],
-): WeekPayResult {
-  const sorted = [...shiftsInWeek].sort((a, b) =>
-    a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date),
+function sundayRateOvertime(seg: HourSegment, job: Job, hours: number): OvertimeSegment {
+  const sundayRate = job.morningRate * (1 + job.casualLoadingPercent / 100) * job.sundayMultiplier;
+  const rate = seg.dayType === 'publicHoliday' ? Math.max(sundayRate, seg.rate) : sundayRate;
+  const multiplier = seg.rate > 0 ? rate / seg.rate : 1;
+  return { basis: 'sundayRate', tierIndex: 0, rateLabel: seg.rateLabel, dayType: seg.dayType, hours, multiplier, rate, pay: hours * rate };
+}
+
+/** One shift in an overtime period, with its own job and its already-calculated daily pay. */
+export interface PeriodShift {
+  job: Job;
+  daily: ShiftDailyBreakdown;
+}
+
+/**
+ * Applies a period's overtime limit across its shifts (given in chronological order; they may
+ * belong to several jobs paid by the same employer). Once total ordinary hours (excluding daily
+ * OT) pass the limit, the excess becomes overtime: with sundayFirst, Sunday hours go first
+ * (latest Sunday first) at the flat Sunday rate; anything beyond that comes off the end of the
+ * period and is paid at the flat Sunday rate (atSundayRate) or through the overtime tiers in
+ * chronological order, on top of the rate those hours actually fall under. Super is paid on
+ * ordinary pay only, never overtime.
+ */
+export function reconcilePeriodOvertime(items: PeriodShift[], rule: PeriodOvertimeRule | null): ShiftWeeklyBreakdown[] {
+  const regular: HourSegment[][] = items.map(({ daily }) =>
+    daily.regularSegments.map((s) => ({ rateLabel: s.rateLabel, dayType: s.dayType, hours: s.hours, rate: s.rate })),
   );
+  const periodOvertime: OvertimeSegment[][] = items.map(() => []);
+  const totalRegularHours = items.reduce((sum, { daily }) => sum + daily.regularHours, 0);
+  let remaining = rule ? Math.max(0, totalRegularHours - rule.thresholdHours) : 0;
 
-  const dailyBreakdowns = sorted.map((shift) => computeShiftDaily(shift, job, publicHolidays));
-
-  const weeklyThreshold = job.overtimeThresholdHoursPerWeek;
-  let runningRegularHours = 0;
-  let weeklyTierHoursConsumed = 0;
-
-  const shiftBreakdowns: ShiftWeeklyBreakdown[] = dailyBreakdowns.map((daily) => {
-    let weeklyOvertimeHours = 0;
-    let weeklyOvertimeSegments: OvertimeSegment[] = [];
-    let finalRegularSegments: RegularSegment[] = daily.regularSegments;
-
-    if (weeklyThreshold != null) {
-      const before = runningRegularHours;
-      const after = before + daily.regularHours;
-      weeklyOvertimeHours = Math.max(0, after - Math.max(before, weeklyThreshold));
-      runningRegularHours = after;
-
-      if (weeklyOvertimeHours > 0) {
-        const asHourSegments: HourSegment[] = daily.regularSegments.map((s) => ({
-          rateLabel: s.rateLabel,
-          dayType: s.dayType,
-          hours: s.hours,
-          rate: s.rate,
-        }));
-        const { remaining, taken } = takeFromEnd(asHourSegments, weeklyOvertimeHours);
-        finalRegularSegments = toRegularSegments(remaining);
-        weeklyOvertimeSegments = splitSegmentsIntoTiers(taken, job.overtimeTiers, weeklyTierHoursConsumed);
-        weeklyTierHoursConsumed += weeklyOvertimeHours;
+  if (rule?.sundayFirst) {
+    for (let i = items.length - 1; i >= 0 && remaining > 1e-9; i--) {
+      for (let j = regular[i].length - 1; j >= 0 && remaining > 1e-9; j--) {
+        const seg = regular[i][j];
+        if (seg.dayType !== 'sunday' || seg.hours <= 1e-9) continue;
+        const take = Math.min(seg.hours, remaining);
+        regular[i][j] = { ...seg, hours: seg.hours - take };
+        remaining -= take;
+        periodOvertime[i].unshift(sundayRateOvertime(seg, items[i].job, take));
       }
     }
+  }
 
+  if (rule && remaining > 1e-9) {
+    const taken: HourSegment[][] = items.map(() => []);
+    for (let i = items.length - 1; i >= 0 && remaining > 1e-9; i--) {
+      const available = regular[i].reduce((sum, seg) => sum + seg.hours, 0);
+      const takeHere = Math.min(available, remaining);
+      if (takeHere <= 1e-9) continue;
+      const split = takeFromEnd(
+        regular[i].filter((seg) => seg.hours > 1e-9),
+        takeHere,
+      );
+      regular[i] = split.remaining;
+      taken[i] = split.taken;
+      remaining -= takeHere;
+    }
+    let tierHoursConsumed = 0;
+    for (let i = 0; i < items.length; i++) {
+      if (taken[i].length === 0) continue;
+      if (rule.atSundayRate) {
+        periodOvertime[i].push(...taken[i].filter((seg) => seg.hours > 1e-9).map((seg) => sundayRateOvertime(seg, items[i].job, seg.hours)));
+        continue;
+      }
+      periodOvertime[i].push(...splitSegmentsIntoTiers(taken[i], rule.tiers, tierHoursConsumed));
+      tierHoursConsumed += taken[i].reduce((sum, seg) => sum + seg.hours, 0);
+    }
+  }
+
+  return items.map(({ job, daily }, i) => {
+    const finalRegularSegments = toRegularSegments(regular[i]);
+    const weeklyOvertimeSegments = periodOvertime[i];
     const finalRegularHours = finalRegularSegments.reduce((sum, s) => sum + s.hours, 0);
     const finalRegularPay = finalRegularSegments.reduce((sum, s) => sum + s.pay, 0);
+    const weeklyOvertimeHours = weeklyOvertimeSegments.reduce((sum, seg) => sum + seg.hours, 0);
     const weeklyOvertimePay = weeklyOvertimeSegments.reduce((sum, seg) => sum + seg.pay, 0);
     const finalGrossPay = finalRegularPay + daily.overtimePay + weeklyOvertimePay;
-    const superAmount = job.includeSuper ? finalGrossPay * (job.superRatePercent / 100) : 0;
+    // Super is on ordinary time earnings only — overtime isn't, so it's left out.
+    const superAmount = job.includeSuper ? finalRegularPay * (job.superRatePercent / 100) : 0;
 
     return {
       ...daily,
@@ -379,6 +422,32 @@ export function computeWeekPay(
       superAmount,
     };
   });
+}
+
+/**
+ * Calculates pay for every shift a job worked in one week, applying the job's weekly overtime
+ * limit (see reconcilePeriodOvertime). Jobs on a fortnightly limit are reconciled per
+ * fortnight by the report builder instead.
+ */
+export function computeWeekPay(
+  shiftsInWeek: Shift[],
+  job: Job,
+  publicHolidays: PublicHoliday[],
+): WeekPayResult {
+  const sorted = [...shiftsInWeek].sort((a, b) =>
+    a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date),
+  );
+  const items = sorted.map((shift) => ({ job, daily: computeShiftDaily(shift, job, publicHolidays) }));
+  const rule =
+    job.overtimeThresholdHoursPerWeek != null
+      ? {
+          thresholdHours: job.overtimeThresholdHoursPerWeek,
+          tiers: job.overtimeTiers,
+          sundayFirst: job.overtimeFromSundaysFirst,
+          atSundayRate: job.overtimeAtSundayRate,
+        }
+      : null;
+  const shiftBreakdowns = reconcilePeriodOvertime(items, rule);
 
   return {
     shiftBreakdowns,

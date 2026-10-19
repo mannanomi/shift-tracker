@@ -69,6 +69,23 @@ export interface Job {
 
   overtimeThresholdHoursPerDay: number | null;
   overtimeThresholdHoursPerWeek: number | null;
+  /**
+   * Ordinary hours allowed per pay-cycle fortnight before overtime (e.g. 76 for a full-time
+   * guard). Jobs with the same employer that use the same fortnight rule share one limit.
+   * When set, it is used instead of the weekly threshold.
+   */
+  overtimeThresholdHoursPerFortnight: number | null;
+  /**
+   * For the weekly/fortnightly limit: take overtime from Sunday hours first, paid at the flat
+   * Sunday rate (day rate × Sunday multiplier). Overtime never attracts super either way.
+   */
+  overtimeFromSundaysFirst: boolean;
+  /**
+   * For the weekly/fortnightly limit: pay every overtime hour at the flat Sunday rate (day rate ×
+   * sundayMultiplier, no night loading; a public holiday hour keeps its own pay if higher) instead
+   * of the overtime tiers.
+   */
+  overtimeAtSundayRate: boolean;
   overtimeTiers: OvertimeTier[];
 
   casualLoadingPercent: number;
@@ -164,6 +181,9 @@ export function normalizeJob(job: Job): Job {
     nightRateEndsAt: job.nightRateEndsAt ?? null,
     ignoreNightRateOnWeekendsAndHolidays: job.ignoreNightRateOnWeekendsAndHolidays ?? false,
     splitAtMidnight: job.splitAtMidnight ?? true,
+    overtimeThresholdHoursPerFortnight: job.overtimeThresholdHoursPerFortnight ?? null,
+    overtimeFromSundaysFirst: job.overtimeFromSundaysFirst ?? false,
+    overtimeAtSundayRate: job.overtimeAtSundayRate ?? false,
   };
 }
 
@@ -188,6 +208,9 @@ export function createDefaultJob(overrides: Partial<Job> = {}): Job {
     publicHolidayMultiplier: 1,
     overtimeThresholdHoursPerDay: null,
     overtimeThresholdHoursPerWeek: null,
+    overtimeThresholdHoursPerFortnight: null,
+    overtimeFromSundaysFirst: false,
+    overtimeAtSundayRate: false,
     overtimeTiers: [{ hoursInTier: 2, multiplier: 1.5 }, { hoursInTier: Infinity, multiplier: 2 }],
     casualLoadingPercent: 0,
     includeSuper: false,

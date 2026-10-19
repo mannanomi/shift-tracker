@@ -49,7 +49,7 @@ export function ShiftsPage() {
 
   const listReport = useMemo(() => {
     if (!jobs || !shifts || !publicHolidays || !settings) return null;
-    return buildRangeReport(listRangeStart, listRangeEnd, jobs, shifts, publicHolidays, settings.weekStartDay);
+    return buildRangeReport(listRangeStart, listRangeEnd, jobs, shifts, publicHolidays, settings.weekStartDay, settings.fortnightAnchorDate);
   }, [jobs, shifts, publicHolidays, settings, listRangeStart, listRangeEnd]);
 
   const calendarRange = useMemo(
@@ -59,7 +59,7 @@ export function ShiftsPage() {
 
   const calendarReport = useMemo(() => {
     if (!jobs || !shifts || !publicHolidays || !settings || !calendarRange) return null;
-    return buildRangeReport(calendarRange.start, calendarRange.end, jobs, shifts, publicHolidays, settings.weekStartDay);
+    return buildRangeReport(calendarRange.start, calendarRange.end, jobs, shifts, publicHolidays, settings.weekStartDay, settings.fortnightAnchorDate);
   }, [jobs, shifts, publicHolidays, settings, calendarRange]);
 
   const shiftsByDate = useMemo(() => {

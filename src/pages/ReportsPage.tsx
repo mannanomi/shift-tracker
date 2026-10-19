@@ -68,17 +68,17 @@ export function ReportsPage() {
 
   const report = useMemo(() => {
     if (!jobs || !shifts || !publicHolidays || !settings || !range) return null;
-    return buildRangeReport(range.start, range.end, jobs, shifts, publicHolidays, settings.weekStartDay);
+    return buildRangeReport(range.start, range.end, jobs, shifts, publicHolidays, settings.weekStartDay, settings.fortnightAnchorDate);
   }, [jobs, shifts, publicHolidays, settings, range]);
 
   const yearReport = useMemo(() => {
     if (!jobs || !shifts || !publicHolidays || !settings) return null;
-    return buildRangeReport(formatDateOnly(addDays(parseDateOnly(today), -380)), today, jobs, shifts, publicHolidays, settings.weekStartDay);
+    return buildRangeReport(formatDateOnly(addDays(parseDateOnly(today), -380)), today, jobs, shifts, publicHolidays, settings.weekStartDay, settings.fortnightAnchorDate);
   }, [jobs, shifts, publicHolidays, settings, today]);
 
   const fyReport = useMemo(() => {
     if (!jobs || !shifts || !publicHolidays || !settings) return null;
-    return buildRangeReport(financialYearStart(today), today, jobs, shifts, publicHolidays, settings.weekStartDay);
+    return buildRangeReport(financialYearStart(today), today, jobs, shifts, publicHolidays, settings.weekStartDay, settings.fortnightAnchorDate);
   }, [jobs, shifts, publicHolidays, settings, today]);
 
   const chart = useMemo((): { data: EarningsPoint[]; series: EarningsSeries[] } => {
@@ -97,7 +97,7 @@ export function ReportsPage() {
         start = startOfFortnightStr(d, settings.fortnightAnchorDate);
         end = endOfFortnightStr(d, settings.fortnightAnchorDate);
       }
-      const r = buildRangeReport(start, end, jobs, shifts, publicHolidays, settings.weekStartDay);
+      const r = buildRangeReport(start, end, jobs, shifts, publicHolidays, settings.weekStartDay, settings.fortnightAnchorDate);
       const point: EarningsPoint = { label: parseDateOnly(start).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) };
       for (const j of r.jobSubtotals) {
         point[j.jobId] = Math.round(j.grossPay * 100) / 100;

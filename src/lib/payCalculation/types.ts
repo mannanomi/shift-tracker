@@ -16,6 +16,12 @@ export interface RegularSegment {
 }
 
 export interface OvertimeSegment {
+  /**
+   * 'tier': paid at an overtime tier's multiplier. 'sundayRate': paid at the flat Sunday rate
+   * (day rate × Sunday multiplier, no night loading; a public holiday hour keeps its own pay if
+   * higher) — `multiplier` is that rate ÷ the hour's ordinary rate. No super is paid on either.
+   */
+  basis: 'tier' | 'sundayRate';
   tierIndex: number;
   /** Which base rate this OT segment's hours fall under — relevant when a night-rate window is configured. */
   rateLabel: RateLabel;
@@ -53,7 +59,10 @@ export interface ShiftDailyBreakdown {
   grossPay: number;
 }
 
-/** A shift's pay after weekly-OT reconciliation across all of a job's shifts that week. */
+/**
+ * A shift's pay after period-overtime reconciliation (the job's weekly limit, or a fortnightly
+ * limit shared by an employer's jobs). The `weekly*` fields hold that period overtime.
+ */
 export interface ShiftWeeklyBreakdown extends ShiftDailyBreakdown {
   weeklyOvertimeSegments: OvertimeSegment[];
   weeklyOvertimeHours: number;

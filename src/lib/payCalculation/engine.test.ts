@@ -456,6 +456,15 @@ describe('computeWeekPay — weekly overtime reconciliation', () => {
     expect(byId.s2.overtimePay).toBeCloseTo(2 * 20 * 1.5);
   });
 
+  it('pays super on ordinary hours only, not on overtime', () => {
+    const job = createDefaultJob({ morningRate: 40, includeSuper: true, superRatePercent: 10, overtimeThresholdHoursPerWeek: 8 });
+    const shifts = [makeShift({ date: '2026-09-14', startTime: '08:00', endTime: '18:00' })]; // 10h: 8 ordinary + 2 OT
+    const [b] = computeWeekPay(shifts, job, []).shiftBreakdowns;
+    expect(b.finalRegularPay).toBeCloseTo(320);
+    expect(b.weeklyOvertimePay).toBeCloseTo(2 * 40 * 1.5);
+    expect(b.superAmount).toBeCloseTo(32); // 10% of $320, nothing on the $120 overtime
+  });
+
   it('calculates super as an addition on the final reconciled gross pay', () => {
     const job = createDefaultJob({ morningRate: 40, includeSuper: true, superRatePercent: 12 });
     const shifts = [makeShift({ date: '2026-09-14', startTime: '09:00', endTime: '13:00' })]; // 4h -> $160
