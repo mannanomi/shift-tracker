@@ -14,6 +14,8 @@ import {
 import { formatCurrency, formatHours } from '../lib/format';
 import { CountUp, Money } from '../components/ui/Money';
 import { downloadCsv, shiftsToCsv } from '../lib/csvExport';
+import { downloadPayReport } from '../lib/payReportPdf';
+import { toast } from '../components/ui/Toast';
 import { estimateAbnSetAside, estimateNetForPeriod } from '../lib/tax/auIncomeTax';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -34,19 +36,6 @@ function formatRange(start: string, end: string): string {
   return `${s} – ${e}`;
 }
 
-/** Prints the page in light mode (the browser's print dialog offers "Save as PDF"). */
-function printAsPdf() {
-  const root = document.documentElement;
-  const wasDark = root.classList.contains('dark');
-  if (wasDark) root.classList.remove('dark');
-  const restore = () => {
-    if (wasDark) root.classList.add('dark');
-    window.removeEventListener('afterprint', restore);
-  };
-  window.addEventListener('afterprint', restore);
-  window.print();
-}
-
 export function ReportsPage() {
   const jobs = useJobs();
   const shifts = useShifts();
@@ -54,6 +43,7 @@ export function ReportsPage() {
   const settings = useSettings();
   const [period, setPeriod] = useState<Period>('weekly');
   const [anchorDate, setAnchorDate] = useState(() => formatDateOnly(new Date()));
+  const [makingPdf, setMakingPdf] = useState(false);
   const today = formatDateOnly(new Date());
 
   const range = useMemo(() => {
@@ -146,6 +136,17 @@ export function ReportsPage() {
     );
   }
 
+  async function handlePdf() {
+    setMakingPdf(true);
+    try {
+      await downloadPayReport(report!, `${formatRange(range!.start, range!.end)} · ${period === 'weekly' ? 'Week' : 'Fortnight'}`);
+    } catch {
+      toast('Couldn’t create the PDF. Try again.');
+    } finally {
+      setMakingPdf(false);
+    }
+  }
+
   function handleExport() {
     const csv = shiftsToCsv(report!);
     downloadCsv(`shifts_${range!.start}_to_${range!.end}.csv`, csv);
@@ -161,8 +162,8 @@ export function ReportsPage() {
             <Button variant="secondary" icon={<Download className="h-4 w-4" />} onClick={handleExport} disabled={shiftCount === 0}>
               <span className="hidden sm:inline">CSV</span>
             </Button>
-            <Button variant="secondary" icon={<FileText className="h-4 w-4" />} onClick={printAsPdf}>
-              PDF
+            <Button variant="secondary" icon={<FileText className="h-4 w-4" />} onClick={handlePdf} disabled={shiftCount === 0 || makingPdf}>
+              {makingPdf ? 'Preparing…' : 'PDF'}
             </Button>
           </div>
         }
