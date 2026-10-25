@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDays, addMonths } from 'date-fns';
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, Inbox, List, Plus } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, Inbox, List, Plus, Repeat } from 'lucide-react';
 import { formatHours } from '../lib/format';
 import { Money } from '../components/ui/Money';
 import type { Shift } from '../types';
@@ -14,6 +14,7 @@ import { Modal } from '../components/ui/Modal';
 import { PageHeader } from '../components/ui/PageHeader';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ShiftForm } from '../components/shifts/ShiftForm';
+import { RosterManager } from '../components/shifts/RosterManager';
 import { Sheet } from '../components/ui/Sheet';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { setSelectedShiftsDay } from '../lib/selectedShiftsDay';
@@ -39,6 +40,7 @@ export function ShiftsPage() {
   // Phones show the selected day in a pop-up sheet; laptops show it beside the calendar.
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [daySheetOpen, setDaySheetOpen] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(false);
 
   // Share the selected day so the bottom bar's + adds a shift on it.
   useEffect(() => setSelectedShiftsDay(selectedDate), [selectedDate]);
@@ -174,9 +176,15 @@ export function ShiftsPage() {
         icon={<Clock className="h-5 w-5" />}
         title="Shifts"
         action={
-          <Button icon={<Plus className="h-4 w-4" />} onClick={() => setFormTarget({ mode: 'new' })}>
-            Add shift
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" icon={<Repeat className="h-4 w-4" />} onClick={() => setRosterOpen(true)}>
+              Roster
+            </Button>
+            <Button icon={<Plus className="h-4 w-4" />} onClick={() => setFormTarget({ mode: 'new' })}>
+              <span className="hidden sm:inline">Add shift</span>
+              <span className="sm:hidden">Add</span>
+            </Button>
+          </div>
         }
       />
 
@@ -281,6 +289,12 @@ export function ShiftsPage() {
             </Button>
           </div>
         </Sheet>
+      )}
+
+      {rosterOpen && (
+        <Modal title="Auto roster" onClose={() => setRosterOpen(false)}>
+          <RosterManager onDone={() => setRosterOpen(false)} />
+        </Modal>
       )}
 
       {formTarget && (

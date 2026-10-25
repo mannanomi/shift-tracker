@@ -125,6 +125,29 @@ export interface Shift {
   earnings?: number;
   /** ABN jobs only: hours worked that day, if recorded (used for $/hr). */
   hoursWorked?: number;
+  /** Set when the shift was created by an auto roster (see Roster). */
+  rosterId?: string;
+}
+
+/**
+ * A repeating roster, e.g. 2 day shifts, 2 night shifts, 4 days off. Shifts are generated from
+ * `startDate` (the first day shift of a cycle) up to `generatedUntil`.
+ */
+export interface Roster {
+  id: string;
+  jobId: string;
+  days: number;
+  nights: number;
+  off: number;
+  dayStart: string;
+  dayEnd: string;
+  nightStart: string;
+  nightEnd: string;
+  unpaidBreakMinutes: number;
+  /** "yyyy-MM-dd" of a first day shift in the cycle. */
+  startDate: string;
+  /** Last date shifts have been generated for ("yyyy-MM-dd"). */
+  generatedUntil: string;
 }
 
 export function incomeCategory(job: Pick<Job, 'kind' | 'taxable'>): IncomeCategory {
@@ -144,6 +167,8 @@ export interface AppSettings {
   goals?: Goal[];
   /** What employers actually paid, for comparing against calculated pay. */
   payslips?: Payslip[];
+  /** Auto rosters that generate shifts. */
+  rosters?: Roster[];
 }
 
 export interface Goal {
