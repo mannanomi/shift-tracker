@@ -2,6 +2,7 @@ import type { RangeReport } from './payCalculation/reports';
 import { buildPayBreakdown } from './payBreakdown';
 import { formatCurrency, formatHours } from './format';
 import { parseDateOnly } from './dateUtils';
+import { saveFile } from './saveFile';
 
 const BRAND: [number, number, number] = [37, 99, 235];
 const INK: [number, number, number] = [15, 23, 42];
@@ -179,15 +180,5 @@ export async function createPayReportPdf(report: RangeReport, periodLabel: strin
 /** Makes the report and lets the user keep it: the share sheet on a phone (Files, AirDrop, email), a download elsewhere. */
 export async function downloadPayReport(report: RangeReport, periodLabel: string): Promise<void> {
   const { doc, fileName } = await createPayReportPdf(report, periodLabel);
-  const file = new File([doc.output('blob')], fileName, { type: 'application/pdf' });
-  const onPhone = window.matchMedia('(pointer: coarse)').matches;
-  if (onPhone && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: 'Pay report' });
-      return;
-    } catch (err) {
-      if ((err as Error).name === 'AbortError') return; // closed the share sheet
-    }
-  }
-  doc.save(fileName);
+  await saveFile(fileName, doc.output('blob'), 'Pay report');
 }

@@ -270,3 +270,19 @@ export async function signOutAndClear(): Promise<void> {
   preparing = null;
   await supabase.auth.signOut();
 }
+
+/**
+ * Permanently deletes the signed-in account and all its synced data (via the
+ * `delete_my_account` database function), then clears this device. Throws if the server
+ * couldn't delete it, leaving everything in place.
+ */
+export async function deleteAccountAndClear(): Promise<void> {
+  if (!supabase) return;
+  const { error } = await supabase.rpc('delete_my_account');
+  if (error) throw new Error(error.message);
+  await wipeLocal();
+  localStorage.removeItem(OWNER_KEY);
+  preparing = null;
+  // The account no longer exists, so ending the session can fail server-side; clear it locally regardless.
+  await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+}

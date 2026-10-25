@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Copy, Download, PiggyBank, Plus, Settings as SettingsIcon, Trash2, Upload } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { saveFile } from '../lib/saveFile';
 import { useSettings } from '../hooks/useData';
 import { exportBackup, findDuplicateShiftIds, importBackup, removeShifts, settingsRepo } from '../db/repository';
 import { Card } from '../components/ui/Card';
@@ -31,13 +32,8 @@ export function SettingsPage() {
   async function handleExport() {
     const backup = await exportBackup();
     const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `shift-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setMessage('Backup downloaded.');
+    await saveFile(`shiftly-backup-${new Date().toISOString().slice(0, 10)}.json`, blob, 'Shiftly backup');
+    setMessage('Backup saved.');
   }
 
   async function handleDedupe() {

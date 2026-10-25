@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { syncStatusBar } from '../lib/native';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -11,6 +12,7 @@ function systemPrefersDark(): boolean {
 function applyTheme(mode: ThemeMode) {
   const isDark = mode === 'dark' || (mode === 'system' && systemPrefersDark());
   document.documentElement.classList.toggle('dark', isDark);
+  syncStatusBar(isDark);
 }
 
 export function getStoredThemeMode(): ThemeMode {

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Cloud, CloudOff, LogIn, LogOut, RefreshCw, UserPlus } from 'lucide-react';
-import { getLastSync, signOutAndClear, SYNC_EVENT, syncNow } from '../lib/supabase/sync';
+import { deleteAccountAndClear, getLastSync, signOutAndClear, SYNC_EVENT, syncNow } from '../lib/supabase/sync';
+import { Modal } from '../components/ui/Modal';
 import { cloudEnabled, supabase } from '../lib/supabase/client';
 import { useSession } from '../hooks/useAuth';
 import { Button } from '../components/ui/Button';
@@ -18,6 +19,10 @@ export function AccountPage() {
 
   const [lastSync, setLastSync] = useState(getLastSync());
   const [syncing, setSyncing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   useEffect(() => {
     const update = () => setLastSync(getLastSync());
     window.addEventListener(SYNC_EVENT, update);
@@ -79,7 +84,48 @@ export function AccountPage() {
               Sign out
             </Button>
           </div>
+          <div className="border-t border-slate-100 pt-3 dark:border-slate-700">
+            <button type="button" onClick={() => setDeleting(true)} className="text-sm font-medium text-red-600 hover:underline dark:text-red-400">
+              Delete my account
+            </button>
+          </div>
         </Card>
+      )}
+
+      {deleting && (
+        <Modal title="Delete account" onClose={() => setDeleting(false)}>
+          <form
+            className="space-y-4"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setDeleteError(null);
+              setDeleteBusy(true);
+              try {
+                await deleteAccountAndClear();
+              } catch (err) {
+                setDeleteError(err instanceof Error ? err.message : 'Couldn’t delete the account. Try again.');
+                setDeleteBusy(false);
+              }
+            }}
+          >
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              This permanently deletes your account and every job, shift and setting synced to it, on all your devices. It
+              can’t be undone. Download a backup from Settings first if you want to keep a copy.
+            </p>
+            <Field label='Type DELETE to confirm'>
+              <Input value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} autoCapitalize="characters" autoComplete="off" />
+            </Field>
+            {deleteError && <p className="text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setDeleting(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="danger" disabled={deleteConfirm.trim().toUpperCase() !== 'DELETE' || deleteBusy}>
+                {deleteBusy ? 'Deleting…' : 'Delete account'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {cloudEnabled && !loading && !session && (
@@ -118,9 +164,24 @@ export function AccountPage() {
                 {mode === 'signin' ? 'New here? Create an account' : 'Have an account? Sign in'}
               </button>
             </div>
+            {mode === 'signup' && (
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                By creating an account you agree to the{' '}
+                <a href="/privacy.html" target="_blank" rel="noreferrer" className="underline">
+                  privacy policy
+                </a>
+                . Pay figures are estimates — always check them against your payslip.
+              </p>
+            )}
           </form>
         </Card>
       )}
+
+      <p className="text-center text-xs text-slate-400 dark:text-slate-500">
+        <a href="/privacy.html" target="_blank" rel="noreferrer" className="underline">
+          Privacy policy
+        </a>
+      </p>
     </div>
   );
 }

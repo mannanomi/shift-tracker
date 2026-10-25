@@ -1,3 +1,4 @@
+import { nativeHaptic } from '../../lib/native';
 import { useEffect, useState } from 'react';
 
 interface ToastItem {
@@ -29,13 +30,9 @@ export function toast(message: string, action?: ToastItem['action']) {
   setTimeout(() => dismiss(id), action ? 5000 : 2500);
 }
 
-/** A light tap on devices that support vibration (Android; iOS Safari ignores it). */
+/** A light tap: real haptics in the store app; the vibration API in browsers that have it. */
 export function haptic() {
-  try {
-    navigator.vibrate?.(10);
-  } catch {
-    /* unsupported */
-  }
+  nativeHaptic();
 }
 
 export function Toaster() {

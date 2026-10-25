@@ -1,5 +1,6 @@
 import { registerSW } from 'virtual:pwa-register';
 import { toast } from '../components/ui/Toast';
+import { isNativeApp } from './native';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -15,7 +16,8 @@ function isBusy(): boolean {
  * straight away when nothing is open, or from an Update button when a form is in progress.
  */
 export function setupAppUpdates(): void {
-  if (!('serviceWorker' in navigator)) return;
+  // The store app updates through the App Store / Play Store, not a service worker.
+  if (isNativeApp || !('serviceWorker' in navigator)) return;
 
   const updateSW = registerSW({
     immediate: true,
