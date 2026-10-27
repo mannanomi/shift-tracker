@@ -10,7 +10,7 @@ const out = path.join(root, 'assets');
 mkdirSync(out, { recursive: true });
 
 const iconSvg = readFileSync(path.join(root, 'scripts', 'icon-source.svg'));
-// The mark alone (white ring and hands, sky dot) on a transparent background.
+// The mark alone (white coin with the two-tone S) on a transparent background.
 const markSvg = Buffer.from(
   iconSvg.toString().replace(/<rect[^>]*\/>/, ''),
 );
