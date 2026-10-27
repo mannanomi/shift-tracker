@@ -13,25 +13,22 @@ function startOfMonthStr(monthAnchor: Date): Date {
   return new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), 1);
 }
 
-function endOfMonthStr(monthAnchor: Date): Date {
-  return new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + 1, 0);
-}
-
 function gridStart(monthStart: Date, weekStartDay: 0 | 1): Date {
   const diff = (monthStart.getDay() - weekStartDay + 7) % 7;
   return addDays(monthStart, -diff);
 }
 
-function gridEnd(monthEnd: Date, weekStartDay: 0 | 1): Date {
-  const weekEndDay = (weekStartDay + 6) % 7;
-  const diff = (weekEndDay - monthEnd.getDay() + 7) % 7;
-  return addDays(monthEnd, diff);
+/** Always six full weeks (42 days), so every month's grid is the same height. */
+const GRID_DAYS = 42;
+
+function gridEnd(monthStart: Date, weekStartDay: 0 | 1): Date {
+  return addDays(gridStart(monthStart, weekStartDay), GRID_DAYS - 1);
 }
 
 /** The full visible grid range (including lead/trail days from neighboring months) for a month. */
 export function getCalendarGridRange(month: Date, weekStartDay: 0 | 1): { start: string; end: string } {
   const start = gridStart(startOfMonthStr(month), weekStartDay);
-  const end = gridEnd(endOfMonthStr(month), weekStartDay);
+  const end = gridEnd(startOfMonthStr(month), weekStartDay);
   return { start: formatDateOnly(start), end: formatDateOnly(end) };
 }
 
@@ -65,9 +62,8 @@ export function ShiftCalendar({
   direction: 1 | -1 | 0;
 }) {
   const monthStart = startOfMonthStr(month);
-  const monthEnd = endOfMonthStr(month);
   const start = gridStart(monthStart, weekStartDay);
-  const end = gridEnd(monthEnd, weekStartDay);
+  const end = gridEnd(monthStart, weekStartDay);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
 
   const days: Date[] = [];

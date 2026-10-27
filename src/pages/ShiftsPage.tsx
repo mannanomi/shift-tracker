@@ -230,7 +230,7 @@ export function ShiftsPage() {
               onChangeMonth={changeMonth}
               direction={monthDirection}
             />
-            <p className="mt-2 text-center text-[11px] text-slate-400 lg:hidden dark:text-slate-500">Swipe the calendar to change month</p>
+            <p className="mt-2 truncate text-center text-[11px] text-slate-400 lg:hidden dark:text-slate-500">Swipe the calendar to change month</p>
           </Card>
 
           <section key={selectedDate} className="hidden space-y-2.5 lg:block">
