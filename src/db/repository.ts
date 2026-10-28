@@ -158,8 +158,8 @@ export async function findDuplicateShiftIds(): Promise<string[]> {
   const seen = new Set<string>();
   const duplicates: string[] = [];
   for (const s of shifts) {
-    // ABN entries have no times, so the amount tells two same-day entries apart.
-    const key = `${s.jobId}|${s.date}|${s.startTime}|${s.endTime}|${s.earnings ?? ''}`;
+    // ABN entries, leave and allowances have no times, so the type and amount tell same-day entries apart.
+    const key = `${s.jobId}|${s.date}|${s.entryType ?? ''}|${s.startTime}|${s.endTime}|${s.earnings ?? ''}|${s.hoursWorked ?? ''}`;
     if (seen.has(key)) duplicates.push(s.id);
     else seen.add(key);
   }

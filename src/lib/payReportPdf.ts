@@ -124,7 +124,7 @@ export async function createPayReportPdf(report: RangeReport, periodLabel: strin
       startY: y + 3,
       margin: { left: MARGIN, right: MARGIN },
       head: [['Hours worked as', 'Hours', 'Rate', 'Amount']],
-      body: section.rows.map((r) => [r.label, formatHours(r.hours), `${formatCurrency(r.rate)}/hr`, formatCurrency(r.amount)]),
+      body: section.rows.map((r) => [r.label, r.hours > 0 ? formatHours(r.hours) : '—', r.rate > 0 ? `${formatCurrency(r.rate)}/hr` : '—', formatCurrency(r.amount)]),
       foot: [['Total', formatHours(section.totalHours), '', formatCurrency(section.totalPay)]],
       headStyles: { fillColor: BRAND },
       footStyles: { fillColor: [241, 245, 249], textColor: INK },
@@ -139,7 +139,7 @@ export async function createPayReportPdf(report: RangeReport, periodLabel: strin
       doc.setFontSize(9);
       doc.setTextColor(...MUTED);
       doc.text(
-        `Super (${section.superRatePercent}% on ordinary hours, not overtime): ${formatCurrency(section.superAmount)}`,
+        `Super (${section.superRatePercent}% on ordinary hours, leave and allowances, not overtime): ${formatCurrency(section.superAmount)}`,
         MARGIN,
         y,
       );

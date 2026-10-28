@@ -1,7 +1,15 @@
 import { incomeCategory, type IncomeCategory, type Job, type PublicHoliday, type Shift } from '../../types';
 import { startOfFortnightStr, startOfWeekStr } from '../dateUtils';
 import { employerOf } from '../employer';
-import { computeShiftDaily, computeWeekPay, determineDayType, reconcilePeriodOvertime, type PeriodOvertimeRule } from './engine';
+import {
+  compareShiftsChronologically,
+  computeShiftDaily,
+  computeWeekPay,
+  determineDayType,
+  periodOvertimeRule,
+  reconcilePeriodOvertime,
+  type PeriodOvertimeRule,
+} from './engine';
 import type { ShiftWeeklyBreakdown } from './types';
 
 export interface ShiftLine {
@@ -69,14 +77,9 @@ function computeAllShiftLines(
     }
 
     if (job.overtimeThresholdHoursPerFortnight != null && fortnightAnchorDate) {
-      const rule: PeriodOvertimeRule = {
-        thresholdHours: job.overtimeThresholdHoursPerFortnight,
-        tiers: job.overtimeTiers,
-        sundayFirst: job.overtimeFromSundaysFirst,
-        atSundayRate: job.overtimeAtSundayRate,
-      };
+      const rule = periodOvertimeRule(job, job.overtimeThresholdHoursPerFortnight);
       const who = employerOf(job)?.toLowerCase() ?? `job:${job.id}`;
-      const key = [who, rule.thresholdHours, rule.sundayFirst, rule.atSundayRate, JSON.stringify(rule.tiers)].join('|');
+      const key = [who, rule.thresholdHours, rule.sundayFirst, rule.atSundayRate, JSON.stringify(rule.byDay), JSON.stringify(rule.tiers)].join('|');
       const pool = fortnightPools.get(key) ?? { rule, jobIds: new Set<string>() };
       pool.jobIds.add(job.id);
       fortnightPools.set(key, pool);
@@ -111,7 +114,7 @@ function computeAllShiftLines(
       byFortnight.set(key, group);
     }
     for (const group of byFortnight.values()) {
-      group.sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)));
+      group.sort(compareShiftsChronologically);
       const items = group.map((shift) => {
         const job = jobsById.get(shift.jobId)!;
         return { shift, job, daily: computeShiftDaily(shift, job, publicHolidays) };
@@ -200,6 +203,7 @@ function earningsBreakdown(shift: Shift, publicHolidays: PublicHoliday[]): Shift
     overtimeSegments: [],
     regularPay: pay,
     overtimePay: 0,
+    allowancePay: 0,
     grossPay: pay,
     weeklyOvertimeSegments: [],
     weeklyOvertimeHours: 0,

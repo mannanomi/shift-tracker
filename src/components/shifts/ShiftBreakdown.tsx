@@ -1,4 +1,5 @@
 import type { DayType, OvertimeSegment, RateLabel, ShiftWeeklyBreakdown } from '../../lib/payCalculation/types';
+import type { ShiftEntryType } from '../../types';
 import { formatCurrency, formatHours } from '../../lib/format';
 
 const DAY_TYPE_LABEL: Record<ShiftWeeklyBreakdown['dayType'], string> = {
@@ -10,7 +11,36 @@ const DAY_TYPE_LABEL: Record<ShiftWeeklyBreakdown['dayType'], string> = {
 
 const RATE_LABEL_TEXT: Record<RateLabel, string> = { morning: 'day', night: 'night' };
 
-export function ShiftBreakdown({ breakdown, abn = false }: { breakdown: ShiftWeeklyBreakdown; abn?: boolean }) {
+export function ShiftBreakdown({
+  breakdown,
+  abn = false,
+  entryType = 'shift',
+}: {
+  breakdown: ShiftWeeklyBreakdown;
+  abn?: boolean;
+  entryType?: ShiftEntryType;
+}) {
+  if (entryType !== 'shift') {
+    return (
+      <div className="mt-3 space-y-2 rounded-lg bg-emerald-50/60 p-3 text-sm dark:bg-emerald-500/10">
+        {entryType === 'leave' ? (
+          <>
+            <Row label="Paid leave">{formatHours(breakdown.workedHours)}</Row>
+            <Row label="At base rate">{formatCurrency(breakdown.casualLoadedRate)}/hr</Row>
+          </>
+        ) : (
+          <Row label="Allowance">{formatCurrency(breakdown.allowancePay)}</Row>
+        )}
+        <div className="border-t border-emerald-200/70 pt-2 font-semibold text-slate-900 dark:border-emerald-500/20 dark:text-slate-100">
+          <Row label="Gross pay">{formatCurrency(breakdown.finalGrossPay)}</Row>
+        </div>
+        {breakdown.superAmount > 0 && <Row label="Superannuation">{formatCurrency(breakdown.superAmount)}</Row>}
+        {entryType === 'leave' && (
+          <p className="text-xs text-slate-500 dark:text-slate-400">Counts towards your ordinary hours; never paid as overtime.</p>
+        )}
+      </div>
+    );
+  }
   if (abn) {
     return (
       <div className="mt-3 space-y-2 rounded-lg bg-violet-50/60 p-3 text-sm dark:bg-violet-500/10">
@@ -78,6 +108,8 @@ export function ShiftBreakdown({ breakdown, abn = false }: { breakdown: ShiftWee
             label={
               seg.basis === 'sundayRate'
                 ? `Overtime at Sunday rate (${formatHours(seg.hours)} @ ${formatCurrency(seg.rate)}/hr)`
+                : seg.basis === 'dayRate'
+                ? `Overtime ${seg.dayMultiplier}x${crossesDays ? ` – ${DAY_TYPE_LABEL[seg.dayType]}` : ''} (${formatHours(seg.hours)} @ ${formatCurrency(seg.rate)}/hr)`
                 : `Overtime ${seg.multiplier}x${isSplitShift ? ` – ${sliceLabel(seg)}` : ''} (${formatHours(seg.hours)})`
             }
           >
@@ -97,11 +129,14 @@ export function ShiftBreakdown({ breakdown, abn = false }: { breakdown: ShiftWee
   );
 }
 
-/** Overtime paid at the flat Sunday rate is one rate however the hours split by day/night, so show it as one row. */
+/** Overtime paid at a flat rate (Sunday rate, or day rate × a multiplier) is one rate however the hours split by day/night, so show it as one row. */
 function mergeSundayRateRows(segments: OvertimeSegment[]): OvertimeSegment[] {
   const out: OvertimeSegment[] = [];
   for (const seg of segments) {
-    const same = seg.basis === 'sundayRate' ? out.find((o) => o.basis === 'sundayRate' && Math.abs(o.rate - seg.rate) < 1e-9) : undefined;
+    const same =
+      seg.basis !== 'tier'
+        ? out.find((o) => o.basis === seg.basis && Math.abs(o.rate - seg.rate) < 1e-9 && (seg.basis === 'sundayRate' || o.dayType === seg.dayType))
+        : undefined;
     if (same) {
       same.hours += seg.hours;
       same.pay += seg.pay;

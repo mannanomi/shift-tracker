@@ -86,6 +86,15 @@ export interface Job {
    * of the overtime tiers.
    */
   overtimeAtSundayRate: boolean;
+  /**
+   * For the weekly/fortnightly limit: pay overtime by the day each hour falls on — the day rate
+   * (no night loading) × overtimeWeekdayMultiplier Monday–Friday, × overtimeWeekendMultiplier on
+   * Saturday and Sunday (a public holiday hour keeps its own pay if higher). Takes precedence over
+   * overtimeAtSundayRate and the tiers.
+   */
+  overtimeByDay: boolean;
+  overtimeWeekdayMultiplier: number;
+  overtimeWeekendMultiplier: number;
   overtimeTiers: OvertimeTier[];
 
   casualLoadingPercent: number;
@@ -108,6 +117,13 @@ export interface PublicHoliday {
   state: string;
 }
 
+/**
+ * What a Shift record is: worked time (the default), paid leave (`hoursWorked` hours at the job's
+ * day rate — counts towards the overtime limit, never becomes overtime, earns super), or an
+ * allowance (`earnings` dollars on top of pay, earns super). Leave and allowances have no times.
+ */
+export type ShiftEntryType = 'shift' | 'leave' | 'allowance';
+
 export interface Shift {
   id: string;
   jobId: string;
@@ -121,9 +137,11 @@ export interface Shift {
   /** null = auto-detect from the PublicHoliday list; true/false forces the flag. */
   isPublicHolidayOverride: boolean | null;
   notes: string;
-  /** ABN jobs only: the amount earned that day (startTime/endTime are left empty). */
+  /** Leave and allowance entries on hourly jobs; omitted for worked shifts. */
+  entryType?: ShiftEntryType;
+  /** ABN jobs: the amount earned that day. Allowance entries: the allowance amount. (startTime/endTime are left empty.) */
   earnings?: number;
-  /** ABN jobs only: hours worked that day, if recorded (used for $/hr). */
+  /** ABN jobs: hours worked that day, if recorded (used for $/hr). Leave entries: paid leave hours. */
   hoursWorked?: number;
   /** Set when the shift was created by an auto roster (see Roster). */
   rosterId?: string;
@@ -148,6 +166,15 @@ export interface Roster {
   startDate: string;
   /** Last date shifts have been generated for ("yyyy-MM-dd"). */
   generatedUntil: string;
+}
+
+export function entryTypeOf(shift: Pick<Shift, 'entryType'>): ShiftEntryType {
+  return shift.entryType ?? 'shift';
+}
+
+/** True for a record with start/end times: a worked shift on an hourly job (not ABN earnings, leave or an allowance). */
+export function hasShiftTimes(shift: Pick<Shift, 'entryType'>, job: Pick<Job, 'kind'> | undefined): boolean {
+  return job?.kind !== 'abn' && entryTypeOf(shift) === 'shift';
 }
 
 export function incomeCategory(job: Pick<Job, 'kind' | 'taxable'>): IncomeCategory {
@@ -209,6 +236,9 @@ export function normalizeJob(job: Job): Job {
     overtimeThresholdHoursPerFortnight: job.overtimeThresholdHoursPerFortnight ?? null,
     overtimeFromSundaysFirst: job.overtimeFromSundaysFirst ?? false,
     overtimeAtSundayRate: job.overtimeAtSundayRate ?? false,
+    overtimeByDay: job.overtimeByDay ?? false,
+    overtimeWeekdayMultiplier: job.overtimeWeekdayMultiplier ?? 1.5,
+    overtimeWeekendMultiplier: job.overtimeWeekendMultiplier ?? 2,
   };
 }
 
@@ -236,6 +266,9 @@ export function createDefaultJob(overrides: Partial<Job> = {}): Job {
     overtimeThresholdHoursPerFortnight: null,
     overtimeFromSundaysFirst: false,
     overtimeAtSundayRate: false,
+    overtimeByDay: false,
+    overtimeWeekdayMultiplier: 1.5,
+    overtimeWeekendMultiplier: 2,
     overtimeTiers: [{ hoursInTier: 2, multiplier: 1.5 }, { hoursInTier: Infinity, multiplier: 2 }],
     casualLoadingPercent: 0,
     includeSuper: false,

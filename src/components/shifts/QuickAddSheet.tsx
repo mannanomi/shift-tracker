@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { addDays } from 'date-fns';
 import { Plus, Receipt, SlidersHorizontal, Zap } from 'lucide-react';
-import type { Job, Shift } from '../../types';
+import { hasShiftTimes, type Job, type Shift } from '../../types';
 import { useActiveJobs, useShifts } from '../../hooks/useData';
 import { shiftsRepo } from '../../db/repository';
 import { formatDateOnly, parseDateOnly } from '../../lib/dateUtils';
@@ -33,7 +33,7 @@ function recentTemplates(shifts: Shift[], jobs: Job[]): Template[] {
   const out: Template[] = [];
   for (const s of sorted) {
     const job = jobsById.get(s.jobId);
-    if (!job || job.kind === 'abn') continue;
+    if (!job || !hasShiftTimes(s, job)) continue;
     const key = `${s.jobId}|${s.startTime}|${s.endTime}|${s.unpaidBreakMinutes}`;
     if (seen.has(key)) continue;
     seen.add(key);

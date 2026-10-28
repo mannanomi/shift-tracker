@@ -3,6 +3,7 @@ import { addDays, addWeeks } from 'date-fns';
 import { Banknote, Receipt, BarChart3, ChevronLeft, ChevronRight, Download, FileText, Inbox, Wallet } from 'lucide-react';
 import { useJobs, usePublicHolidays, useSettings, useShifts } from '../hooks/useData';
 import { buildRangeReport } from '../lib/payCalculation/reports';
+import { entryTypeOf } from '../types';
 import {
   endOfFortnightStr,
   endOfWeekStr,
@@ -345,7 +346,11 @@ export function ReportsPage() {
                     ? breakdown.workedHours > 0
                       ? `${formatHours(breakdown.workedHours)} worked`
                       : 'Daily earnings'
-                    : `${shift.startTime}–${shift.endTime}`}
+                    : entryTypeOf(shift) === 'leave'
+                      ? `${formatHours(breakdown.workedHours)} leave`
+                      : entryTypeOf(shift) === 'allowance'
+                        ? 'Allowance'
+                        : `${shift.startTime}–${shift.endTime}`}
                 </span>
               </div>
             ))}

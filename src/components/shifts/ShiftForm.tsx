@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { addDays } from 'date-fns';
 import { Briefcase, Check, Clock, Repeat } from 'lucide-react';
-import type { Shift } from '../../types';
+import { entryTypeOf, type Shift, type ShiftEntryType } from '../../types';
 import { useActiveJobs, useShifts } from '../../hooks/useData';
 import { shiftsRepo } from '../../db/repository';
 import { Button } from '../ui/Button';
@@ -35,7 +35,7 @@ function formatTimeLabel(time: string): string {
 /** Most recently used distinct start/end time pairs for a job, newest first. */
 function recentTimePresets(shifts: Shift[], jobId: string): { startTime: string; endTime: string }[] {
   const jobShifts = [...shifts]
-    .filter((s) => s.jobId === jobId)
+    .filter((s) => s.jobId === jobId && entryTypeOf(s) === 'shift')
     .sort((a, b) => (b.date === a.date ? b.startTime.localeCompare(a.startTime) : b.date.localeCompare(a.date)));
 
   const seen = new Set<string>();
@@ -92,14 +92,37 @@ export function ShiftForm({
 
   const selectedJob = jobs?.find((j) => j.id === form.jobId);
   const isAbn = selectedJob?.kind === 'abn';
+  /** Hourly jobs only: a worked shift, paid leave, or an allowance. */
+  const entryType: ShiftEntryType = isAbn ? 'shift' : entryTypeOf(form);
+  const isTimed = !isAbn && entryType === 'shift';
 
   /** Switching jobs keeps what's entered; an ABN entry has no times, so give an hourly job defaults. */
   function selectJob(jobId: string) {
     setForm((prev) => ({ ...prev, jobId, ...(prev.startTime === '' ? { startTime: '09:00', endTime: '17:00' } : {}) }));
   }
 
+  function selectEntryType(type: ShiftEntryType) {
+    setForm((prev) => ({
+      ...prev,
+      entryType: type === 'shift' ? undefined : type,
+      ...(type === 'shift' && prev.startTime === '' ? { startTime: '09:00', endTime: '17:00' } : {}),
+    }));
+  }
+
   /** ABN entries keep only the amount (and optional hours); hourly shifts drop those fields. */
   function toRecord(): Shift {
+    if (!isAbn && entryType !== 'shift') {
+      const { earnings, hoursWorked, ...rest } = form;
+      return {
+        ...rest,
+        entryType,
+        startTime: '',
+        endTime: '',
+        unpaidBreakMinutes: 0,
+        isPublicHolidayOverride: null,
+        ...(entryType === 'leave' ? { hoursWorked: hoursWorked ?? 0 } : { earnings: Math.round((earnings ?? 0) * 100) / 100 }),
+      };
+    }
     if (isAbn) {
       return {
         ...form,
@@ -107,11 +130,12 @@ export function ShiftForm({
         endTime: '',
         unpaidBreakMinutes: 0,
         isPublicHolidayOverride: null,
+        entryType: undefined,
         earnings: Math.round((form.earnings ?? 0) * 100) / 100,
         hoursWorked: form.hoursWorked && form.hoursWorked > 0 ? form.hoursWorked : undefined,
       };
     }
-    const { earnings: _earnings, hoursWorked: _hours, ...hourly } = form;
+    const { earnings: _earnings, hoursWorked: _hours, entryType: _entryType, ...hourly } = form;
     return hourly;
   }
 
@@ -120,7 +144,7 @@ export function ShiftForm({
     const record = toRecord();
     await shiftsRepo.put(record);
     let extra = 0;
-    if (!shift && !isAbn && repeat !== 'none') {
+    if (!shift && isTimed && repeat !== 'none') {
       const step = repeat === 'weekly' ? 7 : 14;
       for (let i = 1; i <= repeatCount; i++) {
         await shiftsRepo.put({
@@ -133,6 +157,8 @@ export function ShiftForm({
     }
     haptic();
     if (isAbn) toast(shift ? 'Earnings updated' : `${selectedJob?.name ?? 'ABN'} earnings added`);
+    else if (entryType === 'leave') toast(shift ? 'Leave updated' : 'Leave added');
+    else if (entryType === 'allowance') toast(shift ? 'Allowance updated' : 'Allowance added');
     else toast(extra > 0 ? `Saved ${extra + 1} shifts` : shift ? 'Shift updated' : 'Shift added');
     onDone();
   }
@@ -171,11 +197,80 @@ export function ShiftForm({
         </div>
       </Field>
 
+      {!isAbn && (
+        <Field label="Type">
+          <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-700/50" role="radiogroup">
+            {(
+              [
+                ['shift', 'Shift'],
+                ['leave', 'Paid leave'],
+                ['allowance', 'Allowance'],
+              ] as const
+            ).map(([type, label]) => (
+              <button
+                key={type}
+                type="button"
+                role="radio"
+                aria-checked={entryType === type}
+                onClick={() => selectEntryType(type)}
+                className={`rounded-lg px-2 py-1.5 text-sm font-medium transition-colors ${
+                  entryType === type
+                    ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </Field>
+      )}
+
       <Field label="Date">
         <Input type="date" required value={form.date} onChange={(e) => update('date', e.target.value)} />
       </Field>
 
-      {isAbn ? (
+      {entryType === 'leave' && !isAbn ? (
+        <>
+          <Field label="Hours of leave">
+            <Input
+              type="number"
+              inputMode="decimal"
+              step="0.25"
+              min="0.25"
+              required
+              autoFocus={!shift}
+              value={form.hoursWorked ?? ''}
+              onChange={(e) => update('hoursWorked', e.target.value === '' ? undefined : Number(e.target.value))}
+              placeholder="e.g. 12"
+            />
+          </Field>
+          <p className="-mt-2 text-xs text-slate-400 dark:text-slate-500">
+            Personal, carer's or annual leave, paid at the base rate. It counts towards your ordinary hours (so overtime
+            starts sooner), is never overtime itself, and earns super.
+          </p>
+        </>
+      ) : entryType === 'allowance' && !isAbn ? (
+        <>
+          <Field label="Allowance amount ($)">
+            <Input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.01"
+              required
+              autoFocus={!shift}
+              value={form.earnings ?? ''}
+              onChange={(e) => update('earnings', e.target.value === '' ? undefined : Number(e.target.value))}
+              placeholder="0.00"
+            />
+          </Field>
+          <p className="-mt-2 text-xs text-slate-400 dark:text-slate-500">
+            An allowance from your payslip, e.g. relief officer. It's added to your gross pay and earns super. Put the name in
+            the notes.
+          </p>
+        </>
+      ) : isAbn ? (
         <>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Amount earned ($)">
@@ -271,7 +366,7 @@ export function ShiftForm({
         </>
       )}
 
-      {!shift && !isAbn && (
+      {!shift && isTimed && (
         <div>
           <span className="mb-1 flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-300">
             <Repeat className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" /> Repeat
@@ -309,7 +404,7 @@ export function ShiftForm({
           Cancel
         </Button>
         <Button type="submit" icon={<Check className="h-4 w-4" />}>
-          {isAbn ? 'Save earnings' : 'Save shift'}
+          {isAbn ? 'Save earnings' : entryType === 'leave' ? 'Save leave' : entryType === 'allowance' ? 'Save allowance' : 'Save shift'}
         </Button>
       </div>
     </form>

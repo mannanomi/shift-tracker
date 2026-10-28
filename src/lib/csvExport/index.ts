@@ -31,7 +31,7 @@ export function shiftsToCsv(report: RangeReport): string {
     return [
       shift.date,
       job.name,
-      shift.startTime,
+      shift.entryType === 'leave' ? 'Paid leave' : shift.entryType === 'allowance' ? 'Allowance' : shift.startTime,
       shift.endTime,
       breakdown.workedHours.toFixed(2),
       breakdown.dayTypes.join(' + '),

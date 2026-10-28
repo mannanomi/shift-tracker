@@ -1,5 +1,5 @@
 import { addDays, startOfDay } from 'date-fns';
-import type { Job, PublicHoliday, Shift } from '../../types';
+import { entryTypeOf, type Job, type PublicHoliday, type Shift } from '../../types';
 import { combineDateAndTimeInAdelaide, formatDateOnly, isSaturday, isSunday, resolveShiftTimes } from '../dateUtils';
 import type {
   DayType,
@@ -39,6 +39,8 @@ function dayMultiplierFor(job: Job, dayType: DayType): number {
 }
 
 export function workedHoursFor(shift: Shift): number {
+  if (entryTypeOf(shift) === 'leave') return Math.max(0, shift.hoursWorked ?? 0);
+  if (entryTypeOf(shift) === 'allowance') return 0;
   const { start, end } = resolveShiftTimes(shift.date, shift.startTime, shift.endTime);
   const minutes = (end.getTime() - start.getTime()) / 60000 - shift.unpaidBreakMinutes;
   return Math.max(0, minutes / 60);
@@ -138,6 +140,8 @@ interface HourSegment {
   hours: number;
   /** Loaded $/hr for this segment (casual-loaded, day-multiplied) — before any OT tier multiplier. */
   rate: number;
+  /** Paid leave: counts towards a period's ordinary hours but is never turned into overtime. */
+  leave?: boolean;
 }
 
 /** Converts raw time segments into hour segments, removing the shift's unpaid break proportionally across them. */
@@ -245,7 +249,48 @@ function splitSegmentsIntoTiers(tailSegments: HourSegment[], tiers: Job['overtim
 function toRegularSegments(segments: HourSegment[]): RegularSegment[] {
   return segments
     .filter((s) => s.hours > 1e-9)
-    .map((s) => ({ rateLabel: s.rateLabel, dayType: s.dayType, hours: s.hours, rate: s.rate, pay: s.hours * s.rate }));
+    .map((s) => ({
+      rateLabel: s.rateLabel,
+      dayType: s.dayType,
+      hours: s.hours,
+      rate: s.rate,
+      pay: s.hours * s.rate,
+      ...(s.leave ? { leave: true } : {}),
+    }));
+}
+
+/**
+ * A leave or allowance entry: leave is its hours at the day rate (casual-loaded, no day
+ * multiplier or night loading); an allowance is a dollar amount with no hours.
+ */
+function computeEntryDaily(shift: Shift, job: Job, publicHolidays: PublicHoliday[]): ShiftDailyBreakdown {
+  const dayType = determineDayType(shift, publicHolidays);
+  const casualLoadedRate = job.morningRate * (1 + job.casualLoadingPercent / 100);
+  const isLeave = entryTypeOf(shift) === 'leave';
+  const hours = isLeave ? Math.max(0, shift.hoursWorked ?? 0) : 0;
+  const regularSegments = toRegularSegments(
+    isLeave ? [{ rateLabel: 'morning', dayType: 'weekday', hours, rate: casualLoadedRate, leave: true }] : [],
+  );
+  const regularPay = regularSegments.reduce((sum, seg) => sum + seg.pay, 0);
+  const allowancePay = isLeave ? 0 : Math.max(0, shift.earnings ?? 0);
+  return {
+    shiftId: shift.id,
+    workedHours: hours,
+    rateLabel: 'morning',
+    baseRate: job.morningRate,
+    casualLoadedRate,
+    dayType,
+    dayTypes: [dayType],
+    dayMultiplier: 1,
+    loadedHourlyRate: casualLoadedRate,
+    regularHours: hours,
+    regularSegments,
+    overtimeSegments: [],
+    regularPay,
+    overtimePay: 0,
+    allowancePay,
+    grossPay: regularPay + allowancePay,
+  };
 }
 
 /** Calculates a shift's pay in isolation, using only its own day's overtime threshold. */
@@ -254,6 +299,7 @@ export function computeShiftDaily(
   job: Job,
   publicHolidays: PublicHoliday[],
 ): ShiftDailyBreakdown {
+  if (entryTypeOf(shift) !== 'shift') return computeEntryDaily(shift, job, publicHolidays);
   const dayType = determineDayType(shift, publicHolidays);
   const dayMultiplier = dayMultiplierFor(job, dayType);
 
@@ -311,8 +357,14 @@ export function computeShiftDaily(
     overtimeSegments,
     regularPay,
     overtimePay,
+    allowancePay: 0,
     grossPay: regularPay + overtimePay,
   };
+}
+
+/** Orders shifts by date then start time (leave and allowances, which have no time, first on their day). */
+export function compareShiftsChronologically(a: Shift, b: Shift): number {
+  return a.date === b.date ? (a.startTime ?? '').localeCompare(b.startTime ?? '') : a.date.localeCompare(b.date);
 }
 
 /** A weekly or fortnightly limit on ordinary hours, after which hours become overtime. */
@@ -323,6 +375,19 @@ export interface PeriodOvertimeRule {
   sundayFirst: boolean;
   /** Pay all overtime at the Sunday rate instead of the tiers. */
   atSundayRate: boolean;
+  /** Pay overtime at the day rate × a weekday or weekend multiplier (takes precedence over atSundayRate and the tiers). */
+  byDay: { weekday: number; weekend: number } | null;
+}
+
+/** The period overtime rule set on a job for the given limit. */
+export function periodOvertimeRule(job: Job, thresholdHours: number): PeriodOvertimeRule {
+  return {
+    thresholdHours,
+    tiers: job.overtimeTiers,
+    sundayFirst: job.overtimeFromSundaysFirst,
+    atSundayRate: job.overtimeAtSundayRate,
+    byDay: job.overtimeByDay ? { weekday: job.overtimeWeekdayMultiplier, weekend: job.overtimeWeekendMultiplier } : null,
+  };
 }
 
 /**
@@ -335,6 +400,19 @@ function sundayRateOvertime(seg: HourSegment, job: Job, hours: number): Overtime
   const rate = seg.dayType === 'publicHoliday' ? Math.max(sundayRate, seg.rate) : sundayRate;
   const multiplier = seg.rate > 0 ? rate / seg.rate : 1;
   return { basis: 'sundayRate', tierIndex: 0, rateLabel: seg.rateLabel, dayType: seg.dayType, hours, multiplier, rate, pay: hours * rate };
+}
+
+/**
+ * One overtime slice priced by the day it falls on: the day rate (with casual loading, no night
+ * loading) × the weekday multiplier Monday–Friday or the weekend multiplier on Saturday/Sunday. A
+ * public holiday hour keeps its own pay if that is higher.
+ */
+function dayRateOvertime(seg: HourSegment, job: Job, hours: number, byDay: { weekday: number; weekend: number }): OvertimeSegment {
+  const dayMultiplier = seg.dayType === 'saturday' || seg.dayType === 'sunday' || seg.dayType === 'publicHoliday' ? byDay.weekend : byDay.weekday;
+  const dayRate = job.morningRate * (1 + job.casualLoadingPercent / 100) * dayMultiplier;
+  const rate = seg.dayType === 'publicHoliday' ? Math.max(dayRate, seg.rate) : dayRate;
+  const multiplier = seg.rate > 0 ? rate / seg.rate : 1;
+  return { basis: 'dayRate', dayMultiplier, tierIndex: 0, rateLabel: seg.rateLabel, dayType: seg.dayType, hours, multiplier, rate, pay: hours * rate };
 }
 
 /** One shift in an overtime period, with its own job and its already-calculated daily pay. */
@@ -354,7 +432,7 @@ export interface PeriodShift {
  */
 export function reconcilePeriodOvertime(items: PeriodShift[], rule: PeriodOvertimeRule | null): ShiftWeeklyBreakdown[] {
   const regular: HourSegment[][] = items.map(({ daily }) =>
-    daily.regularSegments.map((s) => ({ rateLabel: s.rateLabel, dayType: s.dayType, hours: s.hours, rate: s.rate })),
+    daily.regularSegments.map((s) => ({ rateLabel: s.rateLabel, dayType: s.dayType, hours: s.hours, rate: s.rate, leave: s.leave })),
   );
   const periodOvertime: OvertimeSegment[][] = items.map(() => []);
   const totalRegularHours = items.reduce((sum, { daily }) => sum + daily.regularHours, 0);
@@ -364,7 +442,7 @@ export function reconcilePeriodOvertime(items: PeriodShift[], rule: PeriodOverti
     for (let i = items.length - 1; i >= 0 && remaining > 1e-9; i--) {
       for (let j = regular[i].length - 1; j >= 0 && remaining > 1e-9; j--) {
         const seg = regular[i][j];
-        if (seg.dayType !== 'sunday' || seg.hours <= 1e-9) continue;
+        if (seg.dayType !== 'sunday' || seg.leave || seg.hours <= 1e-9) continue;
         const take = Math.min(seg.hours, remaining);
         regular[i][j] = { ...seg, hours: seg.hours - take };
         remaining -= take;
@@ -376,20 +454,24 @@ export function reconcilePeriodOvertime(items: PeriodShift[], rule: PeriodOverti
   if (rule && remaining > 1e-9) {
     const taken: HourSegment[][] = items.map(() => []);
     for (let i = items.length - 1; i >= 0 && remaining > 1e-9; i--) {
-      const available = regular[i].reduce((sum, seg) => sum + seg.hours, 0);
+      // Paid leave counts towards the limit but is never itself overtime.
+      const worked = regular[i].filter((seg) => seg.hours > 1e-9 && !seg.leave);
+      const available = worked.reduce((sum, seg) => sum + seg.hours, 0);
       const takeHere = Math.min(available, remaining);
       if (takeHere <= 1e-9) continue;
-      const split = takeFromEnd(
-        regular[i].filter((seg) => seg.hours > 1e-9),
-        takeHere,
-      );
-      regular[i] = split.remaining;
+      const split = takeFromEnd(worked, takeHere);
+      regular[i] = [...regular[i].filter((seg) => seg.leave), ...split.remaining];
       taken[i] = split.taken;
       remaining -= takeHere;
     }
     let tierHoursConsumed = 0;
     for (let i = 0; i < items.length; i++) {
       if (taken[i].length === 0) continue;
+      const { byDay } = rule;
+      if (byDay) {
+        periodOvertime[i].push(...taken[i].filter((seg) => seg.hours > 1e-9).map((seg) => dayRateOvertime(seg, items[i].job, seg.hours, byDay)));
+        continue;
+      }
       if (rule.atSundayRate) {
         periodOvertime[i].push(...taken[i].filter((seg) => seg.hours > 1e-9).map((seg) => sundayRateOvertime(seg, items[i].job, seg.hours)));
         continue;
@@ -406,9 +488,9 @@ export function reconcilePeriodOvertime(items: PeriodShift[], rule: PeriodOverti
     const finalRegularPay = finalRegularSegments.reduce((sum, s) => sum + s.pay, 0);
     const weeklyOvertimeHours = weeklyOvertimeSegments.reduce((sum, seg) => sum + seg.hours, 0);
     const weeklyOvertimePay = weeklyOvertimeSegments.reduce((sum, seg) => sum + seg.pay, 0);
-    const finalGrossPay = finalRegularPay + daily.overtimePay + weeklyOvertimePay;
-    // Super is on ordinary time earnings only — overtime isn't, so it's left out.
-    const superAmount = job.includeSuper ? finalRegularPay * (job.superRatePercent / 100) : 0;
+    const finalGrossPay = finalRegularPay + daily.overtimePay + weeklyOvertimePay + daily.allowancePay;
+    // Super is on ordinary time earnings (including leave and allowances) — overtime isn't, so it's left out.
+    const superAmount = job.includeSuper ? (finalRegularPay + daily.allowancePay) * (job.superRatePercent / 100) : 0;
 
     return {
       ...daily,
@@ -434,19 +516,9 @@ export function computeWeekPay(
   job: Job,
   publicHolidays: PublicHoliday[],
 ): WeekPayResult {
-  const sorted = [...shiftsInWeek].sort((a, b) =>
-    a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date),
-  );
+  const sorted = [...shiftsInWeek].sort(compareShiftsChronologically);
   const items = sorted.map((shift) => ({ job, daily: computeShiftDaily(shift, job, publicHolidays) }));
-  const rule =
-    job.overtimeThresholdHoursPerWeek != null
-      ? {
-          thresholdHours: job.overtimeThresholdHoursPerWeek,
-          tiers: job.overtimeTiers,
-          sundayFirst: job.overtimeFromSundaysFirst,
-          atSundayRate: job.overtimeAtSundayRate,
-        }
-      : null;
+  const rule = job.overtimeThresholdHoursPerWeek != null ? periodOvertimeRule(job, job.overtimeThresholdHoursPerWeek) : null;
   const shiftBreakdowns = reconcilePeriodOvertime(items, rule);
 
   return {

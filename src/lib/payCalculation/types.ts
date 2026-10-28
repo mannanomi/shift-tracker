@@ -13,15 +13,21 @@ export interface RegularSegment {
   /** $/hr for this segment (casual-loaded, day-multiplied — not including any OT multiplier). */
   rate: number;
   pay: number;
+  /** Paid leave hours (at the day rate) rather than time worked. */
+  leave?: boolean;
 }
 
 export interface OvertimeSegment {
   /**
    * 'tier': paid at an overtime tier's multiplier. 'sundayRate': paid at the flat Sunday rate
    * (day rate × Sunday multiplier, no night loading; a public holiday hour keeps its own pay if
-   * higher) — `multiplier` is that rate ÷ the hour's ordinary rate. No super is paid on either.
+   * higher) — `multiplier` is that rate ÷ the hour's ordinary rate. 'dayRate': the day rate × the
+   * weekday or weekend overtime multiplier for the day the hour falls on (`dayMultiplier`). No
+   * super is paid on any of them.
    */
-  basis: 'tier' | 'sundayRate';
+  basis: 'tier' | 'sundayRate' | 'dayRate';
+  /** 'dayRate' only: the weekday/weekend overtime multiplier applied to the day rate. */
+  dayMultiplier?: number;
   tierIndex: number;
   /** Which base rate this OT segment's hours fall under — relevant when a night-rate window is configured. */
   rateLabel: RateLabel;
@@ -55,7 +61,9 @@ export interface ShiftDailyBreakdown {
   overtimeSegments: OvertimeSegment[];
   regularPay: number;
   overtimePay: number;
-  /** regularPay + overtimePay, before any weekly-OT reconciliation. */
+  /** Allowance entries: the allowance amount (0 for everything else). Earns super. */
+  allowancePay: number;
+  /** regularPay + overtimePay + allowancePay, before any weekly-OT reconciliation. */
   grossPay: number;
 }
 
@@ -72,7 +80,7 @@ export interface ShiftWeeklyBreakdown extends ShiftDailyBreakdown {
   /** regularSegments after weekly-OT hours are peeled off the end (chronologically) of this shift. */
   finalRegularSegments: RegularSegment[];
   finalRegularPay: number;
-  /** finalRegularPay + overtimePay (daily) + weeklyOvertimePay. */
+  /** finalRegularPay + overtimePay (daily) + weeklyOvertimePay + allowancePay. */
   finalGrossPay: number;
   superAmount: number;
 }

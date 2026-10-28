@@ -1,4 +1,4 @@
-import type { Job } from '../types';
+import { entryTypeOf, type Job } from '../types';
 import type { RangeReport, ShiftLine } from './payCalculation/reports';
 import type { DayType, OvertimeSegment, RateLabel } from './payCalculation/types';
 import { employerOf, roleName } from './employer';
@@ -53,6 +53,7 @@ function ordinaryLabel(dayType: DayType, rateLabel: RateLabel): string {
 
 function overtimeLabel(seg: OvertimeSegment, daily: boolean): string {
   if (seg.basis === 'sundayRate') return 'Overtime – Sunday rate';
+  if (seg.basis === 'dayRate') return `Overtime ×${trimNumber(seg.dayMultiplier ?? seg.multiplier)}`;
   return `${daily ? 'Daily overtime' : 'Overtime'} ×${trimNumber(seg.multiplier)}`;
 }
 
@@ -100,6 +101,7 @@ export function buildPayBreakdown(report: RangeReport): PayBreakdown {
     }
 
     const rows = new Map<string, BreakdownRow & { dayType: DayType; rateLabel: RateLabel }>();
+    const allowances = new Map<string, number>();
     const add = (job: Job, label: string, dayType: DayType, rateLabel: RateLabel, hours: number, rate: number, amount: number, overtime: boolean) => {
       if (hours <= 1e-9) return;
       const fullLabel = jobs.length > 1 ? `${label} · ${roleName(job.name, employer)}` : label;
@@ -111,8 +113,9 @@ export function buildPayBreakdown(report: RangeReport): PayBreakdown {
     };
     for (const { job, breakdown } of lines) {
       for (const seg of breakdown.finalRegularSegments) {
-        add(job, ordinaryLabel(seg.dayType, seg.rateLabel), seg.dayType, seg.rateLabel, seg.hours, seg.rate, seg.pay, false);
+        add(job, seg.leave ? 'Paid leave' : ordinaryLabel(seg.dayType, seg.rateLabel), seg.dayType, seg.rateLabel, seg.hours, seg.rate, seg.pay, false);
       }
+      if (breakdown.allowancePay > 0) allowances.set(job.id, (allowances.get(job.id) ?? 0) + breakdown.allowancePay);
       for (const seg of breakdown.overtimeSegments) {
         add(job, overtimeLabel(seg, true), seg.dayType, seg.rateLabel, seg.hours, seg.rate, seg.pay, true);
       }
@@ -125,9 +128,15 @@ export function buildPayBreakdown(report: RangeReport): PayBreakdown {
       title,
       subtitle: first.taxable ? (jobs.length > 1 ? jobs.map((j) => roleName(j.name, employer)).join(' + ') : null) : 'Cash income',
       kind: 'hourly',
-      rows: [...rows.values()]
-        .sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
-        .map(({ label, hours, rate, amount, overtime }) => ({ label, hours, rate, amount, overtime })),
+      rows: [
+        ...[...rows.values()]
+          .sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
+          .map(({ label, hours, rate, amount, overtime }) => ({ label, hours, rate, amount, overtime })),
+        ...[...allowances].map(([jobId, amount]) => {
+          const job = jobs.find((j) => j.id === jobId)!;
+          return { label: jobs.length > 1 ? `Allowances · ${roleName(job.name, employer)}` : 'Allowances', hours: 0, rate: 0, amount, overtime: false };
+        }),
+      ],
       entries: [],
       totalHours,
       totalPay,
@@ -144,7 +153,14 @@ export function buildPayBreakdown(report: RangeReport): PayBreakdown {
     .map(({ shift, job, breakdown }) => ({
       date: shift.date,
       job: job.name,
-      time: job.kind === 'abn' ? 'Daily earnings' : `${shift.startTime}–${shift.endTime}`,
+      time:
+        job.kind === 'abn'
+          ? 'Daily earnings'
+          : entryTypeOf(shift) === 'leave'
+            ? 'Paid leave'
+            : entryTypeOf(shift) === 'allowance'
+              ? 'Allowance'
+              : `${shift.startTime}–${shift.endTime}`,
       hours: breakdown.workedHours,
       amount: breakdown.finalGrossPay,
       overtime: breakdown.weeklyOvertimeHours > 0 || breakdown.overtimeSegments.length > 0,

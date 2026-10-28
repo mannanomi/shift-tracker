@@ -15,6 +15,11 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Payslip rates often have 4 decimal places (e.g. $34.0761/hr), so derived rates keep them. */
+function round4(n: number): number {
+  return Math.round(n * 10000) / 10000;
+}
+
 function percentMoreFromMultiplier(multiplier: number): number {
   return round2((multiplier - 1) * 100);
 }
@@ -45,7 +50,7 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
   }
 
   const computedNightRate =
-    form.nightRateMode === 'auto' ? round2(form.morningRate * (1 + form.nightLoadingPercent / 100)) : form.nightRate;
+    form.nightRateMode === 'auto' ? round4(form.morningRate * (1 + form.nightLoadingPercent / 100)) : form.nightRate;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -136,7 +141,7 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
             <Field label="Base hourly rate ($/hr)">
               <Input
                 type="number"
-                step="0.01"
+                step="any"
                 min="0"
                 required
                 value={form.morningRate || ''}
@@ -157,7 +162,7 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
                   <Field label="Night loading (%)">
                     <Input
                       type="number"
-                      step="1"
+                      step="any"
                       min="0"
                       className="w-28"
                       value={form.nightLoadingPercent}
@@ -352,8 +357,42 @@ export function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
                 </p>
                 <div className="mt-3">
                   <Checkbox
+                    label="Pay overtime by day of the week"
+                    checked={form.overtimeByDay}
+                    onChange={(e) => update('overtimeByDay', e.target.checked)}
+                  />
+                  <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                    Each overtime hour is paid the day rate (no night loading) × one multiplier on weekdays and another on Saturday
+                    and Sunday, instead of the options below. No super is paid on overtime.
+                  </p>
+                  {form.overtimeByDay && (
+                    <div className="mt-2 grid grid-cols-2 gap-3">
+                      <Field label="Mon–Fri ×">
+                        <Input
+                          type="number"
+                          step="any"
+                          min="1"
+                          value={form.overtimeWeekdayMultiplier}
+                          onChange={(e) => update('overtimeWeekdayMultiplier', Number(e.target.value))}
+                        />
+                      </Field>
+                      <Field label="Sat–Sun ×">
+                        <Input
+                          type="number"
+                          step="any"
+                          min="1"
+                          value={form.overtimeWeekendMultiplier}
+                          onChange={(e) => update('overtimeWeekendMultiplier', Number(e.target.value))}
+                        />
+                      </Field>
+                    </div>
+                  )}
+                </div>
+                <div className={`mt-3 ${form.overtimeByDay ? 'opacity-50' : ''}`}>
+                  <Checkbox
                     label="Pay overtime at the Sunday rate"
                     checked={form.overtimeAtSundayRate}
+                    disabled={form.overtimeByDay}
                     onChange={(e) => update('overtimeAtSundayRate', e.target.checked)}
                   />
                   <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">

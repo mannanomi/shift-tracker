@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { ChevronDown, Copy, Pencil, Trash2 } from 'lucide-react';
-import type { Job, Shift } from '../../types';
+import { entryTypeOf, type Job, type Shift } from '../../types';
 import type { ShiftWeeklyBreakdown } from '../../lib/payCalculation/types';
 import { formatCurrency, formatHours } from '../../lib/format';
 import { parseDateOnly } from '../../lib/dateUtils';
@@ -37,6 +37,7 @@ export function ShiftLineCard({
 }) {
   const swipe = useSwipe({ onSwipeLeft: onDelete, onSwipeRight: onCopy });
   const isAbn = job.kind === 'abn';
+  const entryType = isAbn ? 'shift' : entryTypeOf(shift);
 
   return (
     <div className="relative overflow-hidden rounded-2xl">
@@ -84,12 +85,17 @@ export function ShiftLineCard({
               <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
                 ABN
               </span>
+            ) : entryType !== 'shift' ? (
+              <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                {entryType === 'leave' ? 'Leave' : 'Allowance'}
+              </span>
             ) : (
               <span className="text-xs text-slate-400 dark:text-slate-500">
                 {shift.startTime}–{shift.endTime}
               </span>
             )}
             {!isAbn &&
+              entryType === 'shift' &&
               breakdown.dayTypes
                 .filter((d) => d !== 'weekday')
                 .map((d) => (
@@ -108,7 +114,13 @@ export function ShiftLineCard({
             )}
           </div>
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            {isAbn && breakdown.workedHours === 0 ? 'Daily earnings' : `${formatHours(breakdown.workedHours)} worked`}
+            {entryType === 'leave'
+              ? `${formatHours(breakdown.workedHours)} paid leave`
+              : entryType === 'allowance'
+                ? 'Added to gross pay'
+                : isAbn && breakdown.workedHours === 0
+                  ? 'Daily earnings'
+                  : `${formatHours(breakdown.workedHours)} worked`}
             {shift.notes && ` · ${shift.notes}`}
           </p>
         </div>
@@ -125,7 +137,7 @@ export function ShiftLineCard({
 
       {expanded && (
         <>
-          <ShiftBreakdown breakdown={breakdown} abn={isAbn} />
+          <ShiftBreakdown breakdown={breakdown} abn={isAbn} entryType={entryType} />
           <div className="mt-3 flex justify-end gap-1">
             <Button variant="ghost" icon={<Copy className="h-3.5 w-3.5" />} onClick={onCopy}>
               Copy

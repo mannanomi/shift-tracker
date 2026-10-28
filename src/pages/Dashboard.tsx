@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { addDays } from 'date-fns';
 import { Banknote, PiggyBank, Plus, Receipt, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
-import type { Goal } from '../types';
+import { hasShiftTimes, type Goal } from '../types';
 import { useJobs, usePublicHolidays, useSettings, useShifts } from '../hooks/useData';
 import { buildRangeReport, type RangeReport, type ShiftLine } from '../lib/payCalculation/reports';
 import {
@@ -57,7 +57,7 @@ export function Dashboard() {
     if (!reports) return null;
     const now = new Date();
     const pending = reports.upcoming.shiftLines
-      .filter((line) => line.job.kind !== 'abn')
+      .filter((line) => hasShiftTimes(line.shift, line.job))
       .map((line) => ({ line, ...resolveShiftTimes(line.shift.date, line.shift.startTime, line.shift.endTime) }))
       .filter(({ end }) => end > now)
       .sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -157,9 +157,9 @@ function PayCycleHero({
   let earned = 0;
   let scheduled = 0;
   for (const line of report.shiftLines) {
-    // ABN entries have no times: they count as earned once their day has arrived.
+    // ABN entries, leave and allowances have no times: they count as earned once their day has arrived.
     const done =
-      line.job.kind === 'abn'
+      !hasShiftTimes(line.shift, line.job)
         ? line.shift.date <= today
         : resolveShiftTimes(line.shift.date, line.shift.startTime, line.shift.endTime).end <= now;
     if (done) earned += line.breakdown.finalGrossPay;

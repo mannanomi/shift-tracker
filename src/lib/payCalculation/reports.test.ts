@@ -230,3 +230,59 @@ describe('fortnightly overtime (e.g. a full-time guard on 76 hours)', () => {
   });
 });
 
+
+describe('MSS payslip rules: 75-hour fortnight, overtime by day, leave and allowances', () => {
+  const ANCHOR = '2026-09-14';
+  const restraint = () =>
+    createDefaultJob({
+      id: 'restraint',
+      name: 'Restraint',
+      employer: 'MSS',
+      morningRate: 34.0761,
+      nightRate: 41.4706,
+      nightRateStartsAt: '18:00',
+      nightRateEndsAt: '06:00',
+      ignoreNightRateOnWeekendsAndHolidays: true,
+      includeSuper: true,
+      superRatePercent: 12,
+      overtimeThresholdHoursPerFortnight: 75,
+      overtimeByDay: true,
+      overtimeWeekdayMultiplier: 1.5,
+      overtimeWeekendMultiplier: 2,
+    });
+  const night = (date: string) => makeShift({ jobId: 'restraint', date, startTime: '18:00', endTime: '06:00' });
+  const day = (date: string) => makeShift({ jobId: 'restraint', date, startTime: '06:00', endTime: '18:00' });
+
+  it('matches the 12–25 Oct 2026 payslip except the 3 Thursday-night hours MSS paid at 2.0×', () => {
+    const shifts = [
+      night('2026-10-12'), night('2026-10-13'), night('2026-10-14'), night('2026-10-15'),
+      day('2026-10-20'), day('2026-10-21'), night('2026-10-22'), night('2026-10-23'),
+      makeShift({ jobId: 'restraint', date: '2026-10-25', entryType: 'allowance', startTime: '', endTime: '', earnings: 108.26 }),
+    ];
+    const report = buildRangeReport('2026-10-12', '2026-10-25', [restraint()], shifts, [], 1, ANCHOR);
+    const ot = report.shiftLines.flatMap((l) => l.breakdown.weeklyOvertimeSegments);
+    const otHoursAt = (m: number) => ot.filter((s) => s.dayMultiplier === m).reduce((sum, s) => sum + s.hours, 0);
+    expect(otHoursAt(1.5)).toBeCloseTo(15); // Thu 9pm – Sat 12am
+    expect(otHoursAt(2)).toBeCloseTo(6); // Sat 12am – 6am
+    // Payslip: ordinary 2555.71 + night loading 377.12 + allowance 108.26 + OT 15 × 51.1142 + 6 × 68.1522.
+    expect(report.totalGrossPay).toBeCloseTo(2555.71 + 377.12 + 108.26 + 15 * 51.1142 + 6 * 68.1522, 0);
+    // Super on ordinary + night loading + allowance (payslip: 364.93).
+    expect(report.totalSuper).toBeCloseTo(364.93, 0);
+  });
+
+  it('counts paid leave towards the 75 hours, never as overtime, and pays super on it', () => {
+    const shifts = [
+      makeShift({ jobId: 'restraint', date: '2026-10-12', entryType: 'leave', startTime: '', endTime: '', hoursWorked: 12 }),
+      ...['2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-19', '2026-10-20'].map(day), // 72h worked
+    ];
+    const report = buildRangeReport('2026-10-12', '2026-10-25', [restraint()], shifts, [], 1, ANCHOR);
+    const leave = report.shiftLines.find((l) => l.shift.entryType === 'leave')!;
+    expect(leave.breakdown.finalGrossPay).toBeCloseTo(12 * 34.0761);
+    expect(leave.breakdown.weeklyOvertimeHours).toBe(0);
+    expect(leave.breakdown.superAmount).toBeCloseTo(12 * 34.0761 * 0.12);
+    // 12 + 72 = 84h → 9h overtime off the end of Tuesday 20 Oct, at 1.5×.
+    const last = report.shiftLines.find((l) => l.shift.date === '2026-10-20')!;
+    expect(last.breakdown.weeklyOvertimeHours).toBeCloseTo(9);
+    expect(last.breakdown.weeklyOvertimePay).toBeCloseTo(9 * 34.0761 * 1.5);
+  });
+});
